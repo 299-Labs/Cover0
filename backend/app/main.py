@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import market, trade, users, portfolio
@@ -8,10 +9,13 @@ app = FastAPI(
     version="0.1.0"
 )
 
+# Parse origins from environment or default to localhost
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+
 # CORS configuration allowing local Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"] if "*" in allowed_origins else allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
