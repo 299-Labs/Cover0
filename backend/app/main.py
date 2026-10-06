@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import market, trade, users
+from app.routers import market, trade, users, portfolio
 
 app = FastAPI(
     title="Cover0 API",
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(market.router)
 app.include_router(trade.router)
 app.include_router(users.router)
+app.include_router(portfolio.router)
 
 @app.get("/health", tags=["Health"])
 def health_check():
