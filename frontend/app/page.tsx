@@ -1,30 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchDemoUser, fetchPortfolio, Portfolio } from "./lib/api";
+import { useEffect, useState, useCallback } from "react";
+import { fetchDemoUser, fetchPortfolio, fetchPlayers, Portfolio, Player, Holding } from "./lib/api";
 import Navbar from "./components/Navbar";
+import TradeModal from "./components/TradeModal";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const user = await fetchDemoUser();
-        const data = await fetchPortfolio(user.id);
-        setPortfolio(data);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to load portfolio";
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
+  // Modal State
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [tradeSide, setTradeSide] = useState<"BUY" | "SELL">("SELL");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      const user = await fetchDemoUser();
+      setUserId(user.id);
+      const [portfolioData, playersData] = await Promise.all([
+        fetchPortfolio(user.id),
+        fetchPlayers(),
+      ]);
+      setPortfolio(portfolioData);
+      setPlayers(playersData);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load portfolio";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-    loadData();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("en-US", {
@@ -32,6 +46,28 @@ export default function PortfolioPage() {
       currency: "USD",
       maximumFractionDigits: 0,
     }).format(val);
+
+  const getOwnedShares = (playerId: string) => {
+    const holding = portfolio?.holdings.find((h) => h.player_id === playerId);
+    return holding ? holding.shares_owned : 0;
+  };
+
+  const openTradeModal = (holding: Holding) => {
+    // Prefer full Player record for spot price + team; fallback to holding data
+    const full = players.find((p) => p.id === holding.player_id);
+    const player: Player = full ?? {
+      id: holding.player_id,
+      external_id: holding.player_id,
+      name: holding.player_name,
+      position: holding.position,
+      team: "",
+      current_price: holding.current_price,
+      total_shares_outstanding: 0,
+    };
+    setSelectedPlayer(player);
+    setTradeSide("SELL");
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
@@ -103,7 +139,9 @@ export default function PortfolioPage() {
                     return (
                       <div
                         key={item.player_id}
-                        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4"
+                        onClick={() => openTradeModal(item)}
+                        className="bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl p-4 flex items-center justify-between gap-4 cursor-pointer transition-colors active:scale-[0.99]"
+                        title="Tap to trade"
                       >
                         <div className="min-w-0">
                           <p className="font-bold truncate">{item.player_name}</p>
@@ -136,6 +174,20 @@ export default function PortfolioPage() {
           </div>
         )}
       </div>
+
+      {userId && (
+        <TradeModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          player={selectedPlayer}
+          userId={userId}
+          userCashBalance={portfolio?.cash_balance || 0}
+          userOwnedShares={selectedPlayer ? getOwnedShares(selectedPlayer.id) : 0}
+          initialSide={tradeSide}
+          onSuccess={loadData}
+        />
+      )}
+
       <Navbar />
     </div>
   );

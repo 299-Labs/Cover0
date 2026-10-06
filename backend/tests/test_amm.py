@@ -4,6 +4,7 @@ from app.services.amm import (
     calculate_spot_price,
     calculate_buy_cost,
     calculate_sell_return,
+    calculate_trade_preview,
     BASE_PRICE,
     K_SENSITIVITY,
 )
@@ -50,3 +51,16 @@ def test_invalid_trade_inputs():
 
     with pytest.raises(ValueError, match="Cannot sell more shares"):
         calculate_sell_return(current_shares=Decimal("10"), sell_shares=Decimal("15"))
+
+def test_trade_preview_buy_metrics():
+    """Verify preview calculation returns correct execution price and price impact for a BUY order."""
+    metrics = calculate_trade_preview(
+        current_shares=Decimal("0"),
+        side="BUY",
+        shares=Decimal("2")
+    )
+    assert metrics["current_price"] == Decimal("10000000.00")
+    assert metrics["total_amount"] == Decimal("20010000.00")
+    assert metrics["execution_price"] == Decimal("10005000.00")
+    assert metrics["new_price"] == Decimal("10010000.00")
+    assert metrics["price_impact_percent"] == Decimal("0.1")

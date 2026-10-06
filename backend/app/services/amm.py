@@ -57,3 +57,30 @@ def calculate_sell_return(
     
     total_return = sell_shares * (p1 + p2) / Decimal("2")
     return total_return
+
+def calculate_trade_preview(current_shares: Decimal, side: str, shares: Decimal) -> dict:
+    """Calculates preview metrics including price impact and execution price."""
+    current_price = calculate_spot_price(current_shares)
+    
+    if side == "BUY":
+        total_amount = calculate_buy_cost(current_shares, shares)
+        new_shares = current_shares + shares
+    else:
+        total_amount = calculate_sell_return(current_shares, shares)
+        new_shares = current_shares - shares
+
+    new_price = calculate_spot_price(new_shares)
+    execution_price = total_amount / shares if shares > Decimal("0") else current_price
+    price_impact_percent = (
+        ((new_price - current_price) / current_price) * Decimal("100")
+        if current_price > Decimal("0")
+        else Decimal("0")
+    )
+
+    return {
+        "current_price": current_price,
+        "total_amount": total_amount,
+        "execution_price": execution_price,
+        "new_price": new_price,
+        "price_impact_percent": price_impact_percent,
+    }

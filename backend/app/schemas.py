@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # --- TRADE SCHEMAS ---
 class TradeRequest(BaseModel):
@@ -22,6 +22,16 @@ class TradeResponse(BaseModel):
     new_cash_balance: Decimal
     timestamp: datetime
 
+class TradePreviewResponse(BaseModel):
+    player_id: UUID
+    side: str
+    shares: Decimal
+    current_price: Decimal
+    total_amount: Decimal
+    execution_price: Decimal
+    new_price: Decimal
+    price_impact_percent: Decimal
+
 # --- PLAYER SCHEMAS ---
 class PlayerResponse(BaseModel):
     id: UUID
@@ -34,6 +44,15 @@ class PlayerResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- USER SCHEMAS ---
+class UserResponse(BaseModel):
+    id: UUID
+    username: str
+    email: str
+    cash_balance: Decimal
+
+    model_config = ConfigDict(from_attributes=True)
 
 # --- HOLDING & PORTFOLIO SCHEMAS ---
 class HoldingResponse(BaseModel):

@@ -30,6 +30,29 @@ export interface Player {
   total_shares_outstanding: number;
 }
 
+export interface TradePreviewResponse {
+  player_id: string;
+  side: "BUY" | "SELL";
+  shares: number;
+  current_price: number;
+  total_amount: number;
+  execution_price: number;
+  new_price: number;
+  price_impact_percent: number;
+}
+
+export interface TradeResponse {
+  transaction_id: string;
+  user_id: string;
+  player_id: string;
+  side: "BUY" | "SELL";
+  shares: number;
+  execution_price: number;
+  total_amount: number;
+  new_cash_balance: number;
+  timestamp: string;
+}
+
 export async function fetchDemoUser() {
   const res = await fetch(`${API_BASE_URL}/users/demo`);
   if (!res.ok) throw new Error("Failed to fetch demo user");
@@ -45,6 +68,26 @@ export async function fetchPortfolio(userId: string): Promise<Portfolio> {
 export async function fetchPlayers(): Promise<Player[]> {
   const res = await fetch(`${API_BASE_URL}/market/players`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch players");
+  return res.json();
+}
+
+export async function previewTrade(payload: {
+  user_id: string;
+  player_id: string;
+  side: "BUY" | "SELL";
+  shares: number;
+}) {
+  const res = await fetch(`${API_BASE_URL}/trade/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to estimate trade preview");
+  }
+
   return res.json();
 }
 
