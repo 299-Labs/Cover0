@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -59,3 +59,19 @@ class Friendship(Base):
         UniqueConstraint("user_id", "friend_id", name="unique_friendship"),
         CheckConstraint("user_id != friend_id", name="no_self_friend"),
     )
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    side = Column(String(10), nullable=False)  # "BUY" or "SELL"
+    shares = Column(Numeric(12, 4), nullable=False)
+    price_per_share = Column(Numeric(12, 2), nullable=False)
+    total_amount = Column(Numeric(14, 2), nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("User", backref="transactions")
+    player = relationship("Player", backref="transactions")

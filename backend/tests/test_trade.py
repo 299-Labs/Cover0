@@ -84,3 +84,25 @@ def test_trade_execute_insufficient_holdings(client, db_session):
     })
     assert res.status_code == 400
     assert "Insufficient shares owned" in res.json()["detail"]
+
+
+def test_trade_history_endpoint(client, db_session):
+    user = db_session.query(User).first()
+    player = db_session.query(Player).first()
+
+    # Execute trade
+    client.post("/api/v1/trade/execute", json={
+        "user_id": str(user.id),
+        "player_id": str(player.id),
+        "side": "BUY",
+        "shares": "1"
+    })
+
+    # Fetch trade history
+    response = client.get(f"/api/v1/trade/history/{user.id}")
+    assert response.status_code == 200
+    history = response.json()
+    assert len(history) == 1
+    assert history[0]["side"] == "BUY"
+    assert history[0]["player_name"] == "Patrick Mahomes"
+    assert Decimal(history[0]["total_amount"]) == Decimal("10002500.00")

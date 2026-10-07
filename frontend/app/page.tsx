@@ -1,33 +1,25 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchDemoUser, fetchPortfolio, fetchPlayers, Portfolio, Player, Holding } from "./lib/api";
+import { fetchDemoUser, fetchPortfolio, fetchTradeHistory, Portfolio, Transaction } from "./lib/api";
 import Navbar from "./components/Navbar";
-import TradeModal from "./components/TradeModal";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, History, ShoppingBag, ArrowLeftRight } from "lucide-react";
 
 export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Modal State
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [tradeSide, setTradeSide] = useState<"BUY" | "SELL">("SELL");
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       const user = await fetchDemoUser();
-      setUserId(user.id);
-      const [portfolioData, playersData] = await Promise.all([
+      const [portfolioData, historyData] = await Promise.all([
         fetchPortfolio(user.id),
-        fetchPlayers(),
+        fetchTradeHistory(user.id),
       ]);
       setPortfolio(portfolioData);
-      setPlayers(playersData);
+      setTransactions(historyData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load portfolio";
       setError(msg);
@@ -40,34 +32,12 @@ export default function PortfolioPage() {
     loadData();
   }, [loadData]);
 
-  const formatCurrency = (val: number) =>
+  const formatCurrency = (val: number | string) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       maximumFractionDigits: 0,
-    }).format(val);
-
-  const getOwnedShares = (playerId: string) => {
-    const holding = portfolio?.holdings.find((h) => h.player_id === playerId);
-    return holding ? holding.shares_owned : 0;
-  };
-
-  const openTradeModal = (holding: Holding) => {
-    // Prefer full Player record for spot price + team; fallback to holding data
-    const full = players.find((p) => p.id === holding.player_id);
-    const player: Player = full ?? {
-      id: holding.player_id,
-      external_id: holding.player_id,
-      name: holding.player_name,
-      position: holding.position,
-      team: "",
-      current_price: holding.current_price,
-      total_shares_outstanding: 0,
-    };
-    setSelectedPlayer(player);
-    setTradeSide("SELL");
-    setIsModalOpen(true);
-  };
+    }).format(Number(val) || 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
@@ -135,13 +105,11 @@ export default function PortfolioPage() {
               ) : (
                 <div className="space-y-3">
                   {portfolio.holdings.map((item) => {
-                    const isProfit = item.unrealized_pnl >= 0;
+                    const isProfit = Number(item.unrealized_pnl) >= 0;
                     return (
                       <div
                         key={item.player_id}
-                        onClick={() => openTradeModal(item)}
-                        className="bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl p-4 flex items-center justify-between gap-4 cursor-pointer transition-colors active:scale-[0.99]"
-                        title="Tap to trade"
+                        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4"
                       >
                         <div className="min-w-0">
                           <p className="font-bold truncate">{item.player_name}</p>
@@ -157,12 +125,76 @@ export default function PortfolioPage() {
                               isProfit ? "text-emerald-400" : "text-red-400"
                             }`}
                           >
-                            {isProfit ? (
-                              <ArrowUpRight size={14} />
-                            ) : (
-                              <ArrowDownRight size={14} />
-                            )}
+                            {isProfit ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                             {formatCurrency(item.unrealized_pnl)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Trade Activity Feed */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <History size={18} className="text-slate-400" />
+                <h2 className="text-lg font-bold">Trade History</h2>
+              </div>
+
+              {transactions.length === 0 ? (
+                <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-6 text-center text-slate-500 text-sm">
+                  No transactions executed yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {transactions.map((tx) => {
+                    const isBuy = tx.side === "BUY";
+                    return (
+                      <div
+                        key={tx.id}
+                        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                              isBuy
+                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                : "bg-red-500/10 border-red-500/30 text-red-400"
+                            }`}
+                          >
+                            {isBuy ? <ShoppingBag size={16} /> : <ArrowLeftRight size={16} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-sm">{tx.player_name}</p>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  isBuy
+                                    ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                    : "bg-red-500/15 text-red-400 border-red-500/30"
+                                }`}
+                              >
+                                {tx.side}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {tx.shares} shares @ {formatCurrency(tx.price_per_share)} •{" "}
+                              {new Date(tx.timestamp).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="font-bold text-sm font-mono">
+                            {formatCurrency(tx.total_amount)}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {new Date(tx.timestamp).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
@@ -174,19 +206,6 @@ export default function PortfolioPage() {
           </div>
         )}
       </div>
-
-      {userId && (
-        <TradeModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          player={selectedPlayer}
-          userId={userId}
-          userCashBalance={portfolio?.cash_balance || 0}
-          userOwnedShares={selectedPlayer ? getOwnedShares(selectedPlayer.id) : 0}
-          initialSide={tradeSide}
-          onSuccess={loadData}
-        />
-      )}
 
       <Navbar />
     </div>

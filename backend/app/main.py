@@ -2,6 +2,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import friends, leaderboard, market, portfolio, trade, users
+from app.db import Base, engine
+import app.models
 
 app = FastAPI(
     title="Cover0 API",
@@ -28,6 +30,9 @@ app.include_router(users.router)
 app.include_router(portfolio.router)
 app.include_router(friends.router)
 app.include_router(leaderboard.router)
+
+# Create any missing database tables in PostgreSQL on server startup
+Base.metadata.create_all(bind=engine)
 
 @app.get("/health", tags=["Health"])
 def health_check():

@@ -96,3 +96,18 @@ class LeaderboardEntry(BaseModel):
     cash_balance: Decimal
     holdings_value: Decimal
     total_nav: Decimal
+
+
+class TransactionResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    player_id: UUID
+    player_name: str
+    player_position: str
+    side: str
+    shares: Decimal
+    price_per_share: Decimal
+    total_amount: Decimal
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)

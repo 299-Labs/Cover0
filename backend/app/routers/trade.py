@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from uuid import UUID
 
-from app.db import get_db
 from app import models, schemas
+from app.db import get_db
 from app.services import amm
 
 router = APIRouter(prefix="/api/v1/trade", tags=["Trading"])
@@ -42,7 +43,7 @@ def preview_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
 
 @router.post("/execute", response_model=schemas.TradeResponse)
 def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
-    """Executes a BUY or SELL market order against the AMM bonding curve atomically."""
+    """Executes a BUY or SELL order, updates balances & supply, and logs the transaction."""
     user = db.query(models.User).filter(models.User.id == trade.user_id).with_for_update().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -102,16 +103,62 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
     # Update spot price based on new supply
     player.current_price = amm.calculate_spot_price(Decimal(str(player.total_shares_outstanding)))
 
-    db.commit()
+    # Record persistent transaction log
+    now = datetime.now(timezone.utc)
+    price_per_share = execution_amount / trade_shares
 
-    return schemas.TradeResponse(
-        transaction_id=uuid.uuid4(),
+    transaction = models.Transaction(
         user_id=user.id,
         player_id=player.id,
         side=trade.side,
         shares=trade_shares,
-        execution_price=execution_amount / trade_shares,
+        price_per_share=price_per_share,
+        total_amount=execution_amount,
+        timestamp=now
+    )
+    db.add(transaction)
+
+    db.commit()
+    db.refresh(transaction)
+
+    return schemas.TradeResponse(
+        transaction_id=transaction.id,
+        user_id=user.id,
+        player_id=player.id,
+        side=trade.side,
+        shares=trade_shares,
+        execution_price=price_per_share,
         total_amount=execution_amount,
         new_cash_balance=user.cash_balance,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=transaction.timestamp,
     )
+
+
+@router.get("/history/{user_id}", response_model=list[schemas.TransactionResponse])
+def get_trade_history(user_id: UUID, db: Session = Depends(get_db)):
+    """Fetch all historical transactions for a user, ordered by most recent."""
+    txns = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == user_id)
+        .order_by(models.Transaction.timestamp.desc())
+        .all()
+    )
+
+    result = []
+    for t in txns:
+        result.append(
+            schemas.TransactionResponse(
+                id=t.id,
+                user_id=t.user_id,
+                player_id=t.player_id,
+                player_name=t.player.name if t.player else "Unknown Player",
+                player_position=t.player.position if t.player else "",
+                side=t.side,
+                shares=Decimal(str(t.shares)),
+                price_per_share=Decimal(str(t.price_per_share)),
+                total_amount=Decimal(str(t.total_amount)),
+                timestamp=t.timestamp,
+            )
+        )
+
+    return result

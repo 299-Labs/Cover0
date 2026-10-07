@@ -183,3 +183,29 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   if (!res.ok) throw new Error("Failed to fetch leaderboard");
   return res.json();
 }
+
+export interface Transaction {
+  id: string;
+  user_id: string;
+  player_id: string;
+  player_name: string;
+  player_position: string;
+  side: "BUY" | "SELL";
+  shares: number;
+  price_per_share: number;
+  total_amount: number;
+  timestamp: string;
+}
+
+export async function fetchTradeHistory(userId: string): Promise<Transaction[]> {
+  const res = await fetch(`${API_BASE_URL}/trade/history/${userId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch trade history");
+  const data = await res.json();
+  // Backend serializes Decimals as strings — coerce to numbers.
+  return (data as Record<string, unknown>[]).map((tx) => ({
+    ...(tx as object),
+    shares: Number((tx as Record<string, unknown>).shares),
+    price_per_share: Number((tx as Record<string, unknown>).price_per_share),
+    total_amount: Number((tx as Record<string, unknown>).total_amount),
+  })) as Transaction[];
+}
