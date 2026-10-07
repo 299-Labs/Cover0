@@ -72,3 +72,27 @@ class PortfolioResponse(BaseModel):
     total_holdings_value: Decimal
     total_nav: Decimal
     holdings: List[HoldingResponse]
+
+
+class FriendResponse(BaseModel):
+    id: UUID
+    friend_id: UUID
+    friend_username: str
+    friend_nav: Decimal
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AddFriendRequest(BaseModel):
+    user_id: UUID
+    friend_username: str
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    user_id: UUID
+    username: str
+    cash_balance: Decimal
+    holdings_value: Decimal
+    total_nav: Decimal

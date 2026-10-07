@@ -77,18 +77,20 @@ export default function TradeModal({
 
   if (!isOpen || !player) return null;
 
-  const formatCurrency = (val: number) =>
+  const formatCurrency = (val: number | string) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       maximumFractionDigits: 0,
-    }).format(val);
+    }).format(Number(val) || 0);
 
   const handlePreset = (percent: number) => {
     if (side === "SELL") {
-      setShares((userOwnedShares * percent).toFixed(2));
+      setShares((Number(userOwnedShares) * percent).toFixed(2));
     } else {
-      const approxMax = userCashBalance / player.current_price;
+      const cash = Number(userCashBalance) || 0;
+      const price = Number(player.current_price) || 0;
+      const approxMax = price > 0 ? cash / price : 0;
       setShares((approxMax * percent).toFixed(2));
     }
   };
@@ -115,10 +117,13 @@ export default function TradeModal({
     }
   };
 
+  const priceImpact = preview ? Number(preview.price_impact_percent) : 0;
+  const safePriceImpact = Number.isFinite(priceImpact) ? priceImpact : 0;
+
   const priceImpactColor =
-    !preview || preview.price_impact_percent === 0
+    !preview || safePriceImpact === 0
       ? "text-slate-200"
-      : preview.price_impact_percent > 0
+      : safePriceImpact > 0
         ? "text-emerald-400"
         : "text-red-400";
 
@@ -227,12 +232,12 @@ export default function TradeModal({
                 "..."
               ) : preview ? (
                 <>
-                  {preview.price_impact_percent > 0 ? (
+                  {safePriceImpact > 0 ? (
                     <TrendingUp size={14} />
-                  ) : preview.price_impact_percent < 0 ? (
+                  ) : safePriceImpact < 0 ? (
                     <TrendingDown size={14} />
                   ) : null}
-                  {preview.price_impact_percent.toFixed(2)}%
+                  {safePriceImpact.toFixed(2)}%
                 </>
               ) : (
                 "--"
