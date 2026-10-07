@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchDemoUser, fetchPlayers, fetchPortfolio, Player, Portfolio } from "../lib/api";
 import Navbar from "../components/Navbar";
 import TradeModal from "../components/TradeModal";
-import { ShoppingBag, ArrowLeftRight } from "lucide-react";
+import { ShoppingBag, ArrowLeftRight, Search, X } from "lucide-react";
+
+const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
 
 export default function MarketPage() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -12,6 +14,10 @@ export default function MarketPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPosition, setSelectedPosition] = useState("ALL");
 
   // Modal State
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -58,23 +64,72 @@ export default function MarketPage() {
     return holding ? holding.shares_owned : 0;
   };
 
+  // Client-side filtering logic
+  const filteredPlayers = players.filter((player) => {
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      player.name.toLowerCase().includes(query) ||
+      player.team.toLowerCase().includes(query);
+    const matchesPosition =
+      selectedPosition === "ALL" || player.position === selectedPosition;
+    return matchesSearch && matchesPosition;
+  });
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
       <div className="max-w-3xl mx-auto px-4 pt-8">
-        <h1 className="text-2xl font-black tracking-tight">NFL MARKET</h1>
-        <p className="text-sm text-slate-400 mb-6">Live AMM Spot Prices</p>
-
-        {portfolio && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <ArrowLeftRight size={14} />
-              Cash Balance
-            </span>
-            <span className="text-lg font-black font-mono">
-              {formatCurrency(portfolio.cash_balance)}
-            </span>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight">NFL MARKET</h1>
+            <p className="text-sm text-slate-400">Live AMM Spot Prices</p>
           </div>
-        )}
+          {portfolio && (
+            <div className="text-right">
+              <p className="text-[10px] uppercase font-bold text-slate-500">Cash Balance</p>
+              <p className="text-sm font-bold text-emerald-400">
+                {formatCurrency(portfolio.cash_balance)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative mb-4">
+          <Search className="absolute left-4 top-3.5 text-slate-500" size={18} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search player or team..."
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-11 pr-10 py-3 text-sm text-slate-100 focus:outline-none focus:border-slate-700"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-4 top-3.5 text-slate-500 hover:text-slate-300"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Position Filter Pills */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-none">
+          {POSITIONS.map((pos) => (
+            <button
+              key={pos}
+              onClick={() => setSelectedPosition(pos)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                selectedPosition === pos
+                  ? "bg-slate-100 text-slate-950 shadow-md"
+                  : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {pos}
+            </button>
+          ))}
+        </div>
 
         {loading && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
@@ -83,50 +138,58 @@ export default function MarketPage() {
         )}
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl p-4 text-sm font-medium text-center mb-4">
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl p-4 text-sm font-medium">
             {error}
+          </div>
+        )}
+
+        {!loading && !error && filteredPlayers.length === 0 && (
+          <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-sm">
+            No players found matching &quot;{searchQuery}&quot;.
           </div>
         )}
 
         {!loading && !error && (
           <div className="grid gap-3 sm:grid-cols-2">
-            {players.map((player) => {
+            {filteredPlayers.map((player) => {
               const owned = getOwnedShares(player.id);
               return (
                 <div
                   key={player.id}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3"
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all hover:border-slate-700"
                 >
                   <div>
-                    <h3 className="font-bold leading-tight">{player.name}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {player.position} • {player.team}
-                    </p>
-                    {owned > 0 && (
-                      <span className="inline-block mt-2 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                        Owned: {owned}
-                      </span>
-                    )}
-                    <p className="text-sm font-semibold mt-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-lg">{player.name}</h3>
+                        <p className="text-xs text-slate-400">
+                          {player.position} • {player.team}
+                        </p>
+                      </div>
+                      {owned > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                          Owned: {owned}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-2xl font-black mt-3">
                       {formatCurrency(player.current_price)}
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
                     <button
                       onClick={() => openTradeModal(player, "BUY")}
                       className="py-2.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <ShoppingBag size={14} />
-                      BUY
+                      <ShoppingBag size={14} /> BUY
                     </button>
                     <button
-                      onClick={() => openTradeModal(player, "SELL")}
                       disabled={owned <= 0}
-                      title={owned <= 0 ? "No shares owned" : `Sell ${owned} shares`}
+                      onClick={() => openTradeModal(player, "SELL")}
                       className="py-2.5 px-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      <ShoppingBag size={14} />
-                      SELL
+                      <ArrowLeftRight size={14} /> SELL
                     </button>
                   </div>
                 </div>

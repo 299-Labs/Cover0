@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Player, previewTrade, executeTrade, TradePreviewResponse } from "../lib/api";
-import { X, TrendingUp, TrendingDown } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Layers, Wallet } from "lucide-react";
 
 interface TradeModalProps {
   isOpen: boolean;
@@ -149,6 +149,27 @@ export default function TradeModal({
           >
             <X size={16} />
           </button>
+        </div>
+
+        {/* Player Market Summary Card */}
+        <div className="my-4 grid grid-cols-2 gap-3">
+          <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
+            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <Layers size={12} /> Circulating Supply
+            </div>
+            <p className="text-sm font-bold font-mono text-slate-200 mt-1">
+              {player.total_shares_outstanding} shares
+            </p>
+          </div>
+
+          <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
+            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <Wallet size={12} /> Your Holdings
+            </div>
+            <p className="text-sm font-bold font-mono text-emerald-400 mt-1">
+              {userOwnedShares} shares
+            </p>
+          </div>
         </div>
 
         {/* Side Selector */}
