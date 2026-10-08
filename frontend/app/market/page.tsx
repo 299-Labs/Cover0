@@ -64,7 +64,6 @@ export default function MarketPage() {
     return holding ? holding.shares_owned : 0;
   };
 
-  // Client-side filtering logic
   const filteredPlayers = players.filter((player) => {
     const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -76,18 +75,19 @@ export default function MarketPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
+    <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">
       <div className="max-w-3xl mx-auto px-4 pt-8">
+        
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-black tracking-tight">NFL MARKET</h1>
-            <p className="text-sm text-slate-400">Live AMM Spot Prices</p>
+            <h1 className="text-2xl font-black tracking-tight text-[#f0e9fe]">NFL Market</h1>
+            <p className="text-xs text-[#506c64] font-medium mt-0.5">Live Player Prices</p>
           </div>
           {portfolio && (
             <div className="text-right">
-              <p className="text-[10px] uppercase font-bold text-slate-500">Cash Balance</p>
-              <p className="text-sm font-bold text-emerald-400">
+              <p className="text-[10px] uppercase font-bold text-[#506c64] tracking-wider">Cash Balance</p>
+              <p className="text-sm font-bold font-mono text-[#f0f3bd]">
                 {formatCurrency(portfolio.cash_balance)}
               </p>
             </div>
@@ -96,18 +96,18 @@ export default function MarketPage() {
 
         {/* Search Bar */}
         <div className="relative mb-4">
-          <Search className="absolute left-4 top-3.5 text-slate-500" size={18} />
+          <Search className="absolute left-4 top-3.5 text-[#506c64]" size={18} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search player or team..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-11 pr-10 py-3 text-sm text-slate-100 focus:outline-none focus:border-slate-700"
+            className="w-full bg-[#121916] border border-[#506c64]/30 rounded-2xl pl-11 pr-10 py-3 text-sm text-[#f0e9fe] placeholder-[#506c64] focus:outline-none focus:border-[#a6ece0]/50 transition-all"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-4 top-3.5 text-slate-500 hover:text-slate-300"
+              className="absolute right-4 top-3.5 text-[#506c64] hover:text-[#f0e9fe] transition-colors"
             >
               <X size={16} />
             </button>
@@ -122,8 +122,8 @@ export default function MarketPage() {
               onClick={() => setSelectedPosition(pos)}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
                 selectedPosition === pos
-                  ? "bg-slate-100 text-slate-950 shadow-md"
-                  : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                  ? "bg-[#a6ece0] text-[#0b110f] shadow-md"
+                  : "bg-[#121916] border border-[#506c64]/30 text-[#506c64] hover:text-[#f0e9fe] hover:bg-[#506c64]/20"
               }`}
             >
               {pos}
@@ -131,24 +131,30 @@ export default function MarketPage() {
           ))}
         </div>
 
+        {/* Skeleton Loading State */}
         {loading && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-            Loading market prices...
+          <div className="grid gap-3 sm:grid-cols-2 animate-pulse">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-40 bg-[#121916] rounded-2xl border border-[#506c64]/30" />
+            ))}
           </div>
         )}
 
+        {/* Error State */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl p-4 text-sm font-medium">
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-2xl p-4 text-sm font-medium mb-6">
             {error}
           </div>
         )}
 
+        {/* Empty Search State */}
         {!loading && !error && filteredPlayers.length === 0 && (
-          <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-sm">
+          <div className="bg-[#121916] border border-dashed border-[#506c64]/40 rounded-2xl p-8 text-center text-[#506c64] text-sm">
             No players found matching &quot;{searchQuery}&quot;.
           </div>
         )}
 
+        {/* Player Grid */}
         {!loading && !error && (
           <div className="grid gap-3 sm:grid-cols-2">
             {filteredPlayers.map((player) => {
@@ -156,38 +162,38 @@ export default function MarketPage() {
               return (
                 <div
                   key={player.id}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all hover:border-slate-700"
+                  className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all hover:border-[#506c64]/70"
                 >
                   <div>
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-lg">{player.name}</h3>
-                        <p className="text-xs text-slate-400">
+                        <h3 className="font-bold text-base text-[#f0e9fe]">{player.name}</h3>
+                        <p className="text-xs text-[#506c64] font-medium mt-0.5">
                           {player.position} • {player.team}
                         </p>
                       </div>
                       {owned > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#0b110f] text-[#a6ece0] border border-[#506c64]/40">
                           Owned: {owned}
                         </span>
                       )}
                     </div>
-                    <p className="text-2xl font-black mt-3">
+                    <p className="text-2xl font-black font-mono mt-3 text-[#f0f3bd]">
                       {formatCurrency(player.current_price)}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#506c64]/30">
                     <button
                       onClick={() => openTradeModal(player, "BUY")}
-                      className="py-2.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                      className="py-2.5 px-3 rounded-xl bg-[#a6ece0]/10 hover:bg-[#a6ece0]/20 border border-[#a6ece0]/30 text-[#a6ece0] text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
                       <ShoppingBag size={14} /> BUY
                     </button>
                     <button
                       disabled={owned <= 0}
                       onClick={() => openTradeModal(player, "SELL")}
-                      className="py-2.5 px-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="py-2.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <ArrowLeftRight size={14} /> SELL
                     </button>

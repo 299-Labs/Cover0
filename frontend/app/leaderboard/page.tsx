@@ -35,64 +35,72 @@ export default function LeaderboardPage() {
     }).format(val);
 
   const getRankBadge = (rank: number) => {
-    if (rank === 1) return <Trophy size={20} className="text-yellow-400" />;
-    if (rank === 2) return <Medal size={20} className="text-slate-300" />;
-    if (rank === 3) return <Award size={20} className="text-amber-600" />;
-    return <span className="text-sm font-black text-slate-400 w-5 text-center">#{rank}</span>;
+    if (rank === 1) return <Trophy size={18} className="text-[#f0f3bd]" />;
+    if (rank === 2) return <Medal size={18} className="text-[#a6ece0]" />;
+    if (rank === 3) return <Award size={18} className="text-[#506c64]" />;
+    return <span className="text-xs font-bold font-mono text-[#506c64] w-5 text-center">#{rank}</span>;
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
+    <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">
       <div className="max-w-3xl mx-auto px-4 pt-8">
-        <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
-          <Trophy size={22} className="text-yellow-400" />
-          GLOBAL RANKS
-        </h1>
-        <p className="text-sm text-slate-400 mb-6">Ranked by Total Portfolio NAV</p>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-black tracking-tight text-[#f0e9fe] flex items-center gap-2">
+            Global Ranks
+          </h1>
+          <p className="text-xs text-[#506c64] font-medium mt-0.5">Ranked by Total Portfolio Value</p>
+        </div>
 
+        {/* Skeleton Loading State */}
         {loading && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
+          <div className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-8 text-center text-[#506c64] animate-pulse">
             Loading rankings...
           </div>
         )}
 
+        {/* Error State */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl p-4 text-sm font-medium text-center">
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-2xl p-4 text-sm font-medium text-center mb-6">
             {error}
           </div>
         )}
 
+        {/* Leaderboard Ranks */}
         {!loading && !error && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {leaderboard.map((entry) => {
               const isCurrentUser = entry.user_id === currentUserId;
               return (
                 <div
                   key={entry.user_id}
-                  className={`bg-slate-900 border rounded-2xl p-4 flex items-center gap-4 ${
-                    isCurrentUser ? "border-emerald-500/40 bg-emerald-500/5" : "border-slate-800"
+                  className={`border rounded-xl p-4 flex items-center gap-4 transition-all ${
+                    isCurrentUser
+                      ? "border-[#a6ece0]/50 bg-[#a6ece0]/5"
+                      : "border-[#506c64]/30 bg-[#121916] hover:border-[#506c64]/70"
                   }`}
                 >
-                  <div className="shrink-0 w-8 flex justify-center">{getRankBadge(entry.rank)}</div>
+                  <div className="shrink-0 w-7 flex justify-center">{getRankBadge(entry.rank)}</div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold truncate flex items-center gap-2">
-                      @{entry.username}
+                    <p className="font-bold truncate flex items-center gap-2 text-[#f0e9fe] text-sm">
+                      {entry.username}
                       {isCurrentUser && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30">
                           YOU
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Cash: {formatCurrency(entry.cash_balance)} • Assets:{" "}
-                      {formatCurrency(entry.holdings_value)}
+                    <p className="text-xs text-[#506c64] font-medium mt-0.5">
+                      Cash: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.cash_balance)}</span> | Assets: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.holdings_value)}</span>
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                      Total NAV
+                    <p className="text-[10px] uppercase tracking-wider text-[#506c64] font-bold">
+                      Total Portfolio Value
                     </p>
-                    <p className="font-bold font-mono">{formatCurrency(entry.total_nav)}</p>
+                    <p className="font-bold font-mono text-sm text-[#f0f3bd]">
+                      {formatCurrency(entry.total_nav)}
+                    </p>
                   </div>
                 </div>
               );

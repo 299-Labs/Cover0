@@ -15,7 +15,7 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur border-t border-slate-800">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#040404]/95 backdrop-blur-md border-t border-[#506c64]/30">
       <div className="max-w-3xl mx-auto grid grid-cols-4 px-2 py-2">
         {links.map((link) => {
           const Icon = link.icon;
@@ -24,10 +24,10 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-semibold transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-semibold transition-all ${
                 isActive
-                  ? "text-emerald-400 bg-emerald-500/10"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  ? "text-[#a6ece0] bg-[#a6ece0]/10"
+                  : "text-[#506c64] hover:text-[#f0e9fe] hover:bg-[#506c64]/20"
               }`}
             >
               <Icon size={20} />
