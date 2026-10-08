@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchDemoUser, fetchPlayers, fetchPortfolio, Player, Portfolio } from "../lib/api";
 import Navbar from "../components/Navbar";
 import TradeModal from "../components/TradeModal";
-import { ShoppingBag, ArrowLeftRight, Search, X } from "lucide-react";
+import PlayerDetailModal from "../components/PlayerDetailModal";
+import { ShoppingBag, ArrowLeftRight, Search, X, User as UserIcon } from "lucide-react";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
 
@@ -19,10 +20,14 @@ export default function MarketPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPosition, setSelectedPosition] = useState("ALL");
 
-  // Modal State
+  // Detail Modal State
+  const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Trade Modal State
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [tradeSide, setTradeSide] = useState<"BUY" | "SELL">("BUY");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTradeOpen, setIsTradeOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -53,10 +58,15 @@ export default function MarketPage() {
       maximumFractionDigits: 0,
     }).format(val);
 
+  const openPlayerDetail = (playerId: string) => {
+    setDetailPlayerId(playerId);
+    setIsDetailOpen(true);
+  };
+
   const openTradeModal = (player: Player, side: "BUY" | "SELL") => {
     setSelectedPlayer(player);
     setTradeSide(side);
-    setIsModalOpen(true);
+    setIsTradeOpen(true);
   };
 
   const getOwnedShares = (playerId: string) => {
@@ -162,40 +172,50 @@ export default function MarketPage() {
               return (
                 <div
                   key={player.id}
-                  className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all hover:border-[#506c64]/70"
+                  className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all hover:border-[#506c64]/70 cursor-pointer"
+                  onClick={() => openPlayerDetail(player.id)}
                 >
-                  <div>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-base text-[#f0e9fe]">{player.name}</h3>
-                        <p className="text-xs text-[#506c64] font-medium mt-0.5">
-                          {player.position} • {player.team}
-                        </p>
-                      </div>
-                      {owned > 0 && (
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#0b110f] text-[#a6ece0] border border-[#506c64]/40">
-                          Owned: {owned}
-                        </span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-[#080d0b] border border-[#506c64]/30 overflow-hidden shrink-0 flex items-center justify-center">
+                      {player.headshot_url ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={player.headshot_url} alt={player.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="text-[#506c64]" size={20} />
                       )}
                     </div>
-                    <p className="text-2xl font-black font-mono mt-3 text-[#f0f3bd]">
-                      {formatCurrency(player.current_price)}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-bold text-sm text-[#f0e9fe] truncate">{player.name}</h3>
+                        {owned > 0 && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#0b110f] text-[#a6ece0] border border-[#506c64]/40 shrink-0">
+                            {owned} SH
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#506c64] font-medium">
+                        {player.position} • {player.team}
+                      </p>
+                      <p className="text-lg font-black font-mono text-[#f0f3bd] mt-1">
+                        {formatCurrency(player.current_price)}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#506c64]/30">
+                  {/* Buttons (stopPropagation prevents opening player details modal when clicking buy/sell) */}
+                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#506c64]/30" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => openTradeModal(player, "BUY")}
-                      className="py-2.5 px-3 rounded-xl bg-[#a6ece0]/10 hover:bg-[#a6ece0]/20 border border-[#a6ece0]/30 text-[#a6ece0] text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      className="py-2 px-3 rounded-xl bg-[#a6ece0]/10 hover:bg-[#a6ece0]/20 border border-[#a6ece0]/30 text-[#a6ece0] text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <ShoppingBag size={14} /> BUY
+                      <ShoppingBag size={13} /> BUY
                     </button>
                     <button
                       disabled={owned <= 0}
                       onClick={() => openTradeModal(player, "SELL")}
-                      className="py-2.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      <ArrowLeftRight size={14} /> SELL
+                      <ArrowLeftRight size={13} /> SELL
                     </button>
                   </div>
                 </div>
@@ -205,10 +225,23 @@ export default function MarketPage() {
         )}
       </div>
 
+      {/* Player Detail Modal */}
+      <PlayerDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        playerId={detailPlayerId}
+        userOwnedShares={detailPlayerId ? getOwnedShares(detailPlayerId) : 0}
+        onOpenTrade={(side) => {
+          const p = players.find((pl) => pl.id === detailPlayerId);
+          if (p) openTradeModal(p, side);
+        }}
+      />
+
+      {/* Trade Modal */}
       {userId && (
         <TradeModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          isOpen={isTradeOpen}
+          onClose={() => setIsTradeOpen(false)}
           player={selectedPlayer}
           userId={userId}
           userCashBalance={portfolio?.cash_balance || 0}

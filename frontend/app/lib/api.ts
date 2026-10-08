@@ -9,6 +9,8 @@ export interface Holding {
   current_price: number;
   market_value: number;
   unrealized_pnl: number;
+  external_id?: string;
+  headshot_url?: string;
 }
 
 export interface Portfolio {
@@ -28,6 +30,41 @@ export interface Player {
   team: string;
   current_price: number;
   total_shares_outstanding: number;
+  headshot_url?: string;
+}
+
+export interface PricePoint {
+  timestamp: string;
+  price: number;
+}
+
+export interface PlayerStats {
+  games_played: number;
+  projected_fpts: number;
+  last_game_fpts: number;
+  touchdowns: number;
+  primary_stat_label: string;
+  primary_stat_value: string;
+}
+
+export interface PlayerDetail extends Player {
+  price_history: PricePoint[];
+  stats?: PlayerStats;
+}
+
+export async function fetchPlayerDetail(playerId: string): Promise<PlayerDetail> {
+  const res = await fetch(`${API_BASE_URL}/market/players/${playerId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch player details");
+  const data = await res.json();
+  return {
+    ...data,
+    current_price: Number(data.current_price),
+    total_shares_outstanding: Number(data.total_shares_outstanding),
+    price_history: (data.price_history ?? []).map((pt: { timestamp: string; price: number }) => ({
+      timestamp: pt.timestamp,
+      price: Number(pt.price),
+    })),
+  };
 }
 
 export interface TradePreviewResponse {
@@ -195,6 +232,8 @@ export interface Transaction {
   price_per_share: number;
   total_amount: number;
   timestamp: string;
+  external_id?: string;
+  headshot_url?: string;
 }
 
 export async function fetchTradeHistory(userId: string): Promise<Transaction[]> {

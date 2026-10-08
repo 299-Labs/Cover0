@@ -4,10 +4,11 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
-
+from typing import List
 from app import models, schemas
 from app.db import get_db
 from app.services import amm
+from app.routers.market import get_headshot_url
 
 router = APIRouter(prefix="/api/v1/trade", tags=["Trading"])
 
@@ -134,31 +135,32 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/history/{user_id}", response_model=list[schemas.TransactionResponse])
+@router.get("/history/{user_id}", response_model=List[schemas.TransactionResponse])
 def get_trade_history(user_id: UUID, db: Session = Depends(get_db)):
-    """Fetch all historical transactions for a user, ordered by most recent."""
-    txns = (
+    transactions = (
         db.query(models.Transaction)
         .filter(models.Transaction.user_id == user_id)
         .order_by(models.Transaction.timestamp.desc())
         .all()
     )
 
-    result = []
-    for t in txns:
-        result.append(
+    res = []
+    for tx in transactions:
+        res.append(
             schemas.TransactionResponse(
-                id=t.id,
-                user_id=t.user_id,
-                player_id=t.player_id,
-                player_name=t.player.name if t.player else "Unknown Player",
-                player_position=t.player.position if t.player else "",
-                side=t.side,
-                shares=Decimal(str(t.shares)),
-                price_per_share=Decimal(str(t.price_per_share)),
-                total_amount=Decimal(str(t.total_amount)),
-                timestamp=t.timestamp,
+                id=tx.id,
+                user_id=tx.user_id,
+                player_id=tx.player_id,
+                player_name=tx.player.name,
+                player_position=tx.player.position,
+                side=tx.side,
+                shares=tx.shares,
+                price_per_share=tx.price_per_share,
+                total_amount=tx.total_amount,
+                timestamp=tx.timestamp,
+                external_id=tx.player.external_id,
+                headshot_url=get_headshot_url(tx.player.external_id),
             )
         )
 
-    return result
+    return res

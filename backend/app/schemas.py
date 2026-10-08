@@ -33,6 +33,18 @@ class TradePreviewResponse(BaseModel):
     price_impact_percent: Decimal
 
 # --- PLAYER SCHEMAS ---
+class PricePoint(BaseModel):
+    timestamp: datetime
+    price: Decimal
+
+class PlayerStatSummary(BaseModel):
+    games_played: int = 17
+    projected_fpts: float = 285.5
+    last_game_fpts: float = 21.4
+    touchdowns: int = 12
+    primary_stat_label: str = "Yards"
+    primary_stat_value: str = "1,240"
+
 class PlayerResponse(BaseModel):
     id: UUID
     external_id: str
@@ -41,9 +53,13 @@ class PlayerResponse(BaseModel):
     team: str
     current_price: Decimal
     total_shares_outstanding: Decimal
+    headshot_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+class PlayerDetailResponse(PlayerResponse):
+    price_history: List[PricePoint] = []
+    stats: Optional[PlayerStatSummary] = None
 
 # --- USER SCHEMAS ---
 class UserResponse(BaseModel):
@@ -64,6 +80,8 @@ class HoldingResponse(BaseModel):
     current_price: Decimal
     market_value: Decimal
     unrealized_pnl: Decimal
+    external_id: Optional[str] = None
+    headshot_url: Optional[str] = None
 
 class PortfolioResponse(BaseModel):
     user_id: UUID
@@ -109,5 +127,7 @@ class TransactionResponse(BaseModel):
     price_per_share: Decimal
     total_amount: Decimal
     timestamp: datetime
+    external_id: Optional[str] = None
+    headshot_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
