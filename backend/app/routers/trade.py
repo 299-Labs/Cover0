@@ -8,7 +8,7 @@ from typing import List
 from app import models, schemas
 from app.db import get_db
 from app.services import amm
-from app.routers.market import get_headshot_url
+from app.utils import get_headshot_url
 
 router = APIRouter(prefix="/api/v1/trade", tags=["Trading"])
 

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from app.db import get_db
 from app import models, schemas
-from app.routers.market import get_headshot_url
+from app.utils import get_headshot_url
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/v1/portfolio", tags=["Portfolio"])

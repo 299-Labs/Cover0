@@ -47,9 +47,97 @@ export interface PlayerStats {
   primary_stat_value: string;
 }
 
+export interface PlayerBio {
+  age?: number;
+  height?: string;
+  weight?: string;
+  college?: string;
+  years_exp?: number;
+  number?: number;
+  status?: string;
+  injury_status?: string;
+  injury_notes?: string;
+}
+
+export interface OwnershipMetrics {
+  total_shares_outstanding: number;
+  platform_user_holders: number;
+  platform_ownership_pct: number;
+}
+
+export interface MarketRankings {
+  fpts_rank: number;
+  ownership_rank: number;
+  value_rank: number;
+  proj_value_rank: number;
+}
+
+export interface StatBreakdown {
+  pts_ppr: number;
+  pass_att: number;
+  pass_cmp: number;
+  pass_yd: number;
+  pass_td: number;
+  pass_int: number;
+  rush_att: number;
+  rush_yd: number;
+  rush_td: number;
+  rec_target: number;
+  rec: number;
+  rec_yd: number;
+  rec_td: number;
+  fum_lost: number;
+}
+
+export interface GameLogEntry {
+  season: string;
+  week: number;
+  opponent: string;
+  pts_ppr: number;
+  pass_cmp: number;
+  pass_att: number;
+  pass_yd: number;
+  pass_td: number;
+  rush_att: number;
+  rush_yd: number;
+  rush_td: number;
+  rec_target: number;
+  rec: number;
+  rec_yd: number;
+  rec_td: number;
+}
+
+export interface PastSeasonSummary {
+  season: string;
+  team: string;
+  games_played: number;
+  pts_ppr: number;
+  pass_cmp: number;
+  pass_att: number;
+  pass_yd: number;
+  pass_td: number;
+  pass_int: number;
+  rush_att: number;
+  rush_yd: number;
+  rush_td: number;
+  rec_target: number;
+  rec: number;
+  rec_yd: number;
+  rec_td: number;
+}
+
 export interface PlayerDetail extends Player {
+  current_week: number;
+  bio?: PlayerBio;
+  ownership?: OwnershipMetrics;
+  rankings?: MarketRankings;
   price_history: PricePoint[];
   stats?: PlayerStats;
+  season_actual_stats?: StatBreakdown;
+  weekly_projected_stats?: StatBreakdown;
+  season_projected_stats?: StatBreakdown;
+  game_logs?: GameLogEntry[];
+  past_seasons?: PastSeasonSummary[];
 }
 
 export async function fetchPlayerDetail(playerId: string): Promise<PlayerDetail> {
@@ -59,6 +147,7 @@ export async function fetchPlayerDetail(playerId: string): Promise<PlayerDetail>
   return {
     ...data,
     current_price: Number(data.current_price),
+    current_week: Number(data.current_week ?? 1),
     total_shares_outstanding: Number(data.total_shares_outstanding),
     price_history: (data.price_history ?? []).map((pt: { timestamp: string; price: number }) => ({
       timestamp: pt.timestamp,

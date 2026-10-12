@@ -45,6 +45,85 @@ class PlayerStatSummary(BaseModel):
     primary_stat_label: str = "Yards"
     primary_stat_value: str = "1,240"
 
+class PlayerBio(BaseModel):
+    age: Optional[int] = None
+    height: Optional[str] = None
+    weight: Optional[str] = None
+    college: Optional[str] = None
+    years_exp: Optional[int] = None
+    number: Optional[int] = None
+    status: Optional[str] = "Active"
+    injury_status: Optional[str] = None
+    injury_notes: Optional[str] = None
+
+
+class OwnershipMetrics(BaseModel):
+    total_shares_outstanding: Decimal
+    platform_user_holders: int
+    platform_ownership_pct: float
+
+
+class MarketRankings(BaseModel):
+    fpts_rank: int
+    ownership_rank: int
+    value_rank: int  # Current FPTS / Spot Price ratio
+    proj_value_rank: int  # Projected FPTS / Spot Price ratio
+
+
+class StatBreakdown(BaseModel):
+    pts_ppr: float = 0.0
+    pass_att: float = 0
+    pass_cmp: float = 0
+    pass_yd: float = 0
+    pass_td: float = 0
+    pass_int: float = 0
+    rush_att: float = 0
+    rush_yd: float = 0
+    rush_td: float = 0
+    rec_target: float = 0
+    rec: float = 0
+    rec_yd: float = 0
+    rec_td: float = 0
+    fum_lost: float = 0
+
+
+class GameLogEntry(BaseModel):
+    season: str = "2026"
+    week: int
+    opponent: str
+    pts_ppr: float
+    pass_cmp: int
+    pass_att: int
+    pass_yd: int
+    pass_td: int
+    rush_att: int
+    rush_yd: int
+    rush_td: int
+    rec_target: int = 0
+    rec: int
+    rec_yd: int
+    rec_td: int
+
+
+class PastSeasonSummary(BaseModel):
+    season: str
+    team: str
+    games_played: int
+    pts_ppr: float
+    pass_cmp: int = 0
+    pass_att: int = 0
+    pass_yd: int = 0
+    pass_td: int = 0
+    pass_int: int = 0
+    rush_att: int = 0
+    rush_yd: int = 0
+    rush_td: int = 0
+    rec_target: int = 0
+    rec: int = 0
+    rec_yd: int = 0
+    rec_td: int = 0
+
+
 class PlayerResponse(BaseModel):
     id: UUID
     external_id: str
@@ -58,8 +137,17 @@ class PlayerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class PlayerDetailResponse(PlayerResponse):
+    current_week: int = 1
+    bio: Optional[PlayerBio] = None
+    ownership: Optional[OwnershipMetrics] = None
+    rankings: Optional[MarketRankings] = None
     price_history: List[PricePoint] = []
     stats: Optional[PlayerStatSummary] = None
+    season_actual_stats: Optional[StatBreakdown] = None
+    weekly_projected_stats: Optional[StatBreakdown] = None
+    season_projected_stats: Optional[StatBreakdown] = None
+    game_logs: List[GameLogEntry] = []
+    past_seasons: List[PastSeasonSummary] = []
 
 # --- USER SCHEMAS ---
 class UserResponse(BaseModel):
