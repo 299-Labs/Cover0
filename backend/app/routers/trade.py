@@ -28,7 +28,12 @@ def preview_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
             status_code=400, detail="Cannot sell more shares than total circulating supply"
         )
 
-    calc = amm.calculate_trade_preview(current_shares, trade.side, trade_shares)
+    calc = amm.calculate_trade_preview(
+        base_price=Decimal(str(player.base_price)),
+        current_shares=current_shares, 
+        side=trade.side, 
+        shares=trade_shares
+    )
 
     return schemas.TradePreviewResponse(
         player_id=player.id,
@@ -60,9 +65,10 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
 
     current_shares = Decimal(str(player.total_shares_outstanding))
     trade_shares = Decimal(str(trade.shares))
+    base_price = Decimal(str(player.base_price))
 
     if trade.side == "BUY":
-        cost = amm.calculate_buy_cost(current_shares, trade_shares)
+        cost = amm.calculate_buy_cost(base_price, current_shares, trade_shares)
         if Decimal(str(user.cash_balance)) < cost:
             raise HTTPException(status_code=400, detail="Insufficient cash balance")
 
@@ -90,7 +96,7 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
         if not holding or Decimal(str(holding.shares_owned)) < trade_shares:
             raise HTTPException(status_code=400, detail="Insufficient shares owned")
 
-        proceeds = amm.calculate_sell_return(current_shares, trade_shares)
+        proceeds = amm.calculate_sell_return(base_price, current_shares, trade_shares)
 
         user.cash_balance = Decimal(str(user.cash_balance)) + proceeds
         player.total_shares_outstanding = current_shares - trade_shares
@@ -102,7 +108,7 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
         execution_amount = proceeds
 
     # Update spot price based on new supply
-    player.current_price = amm.calculate_spot_price(Decimal(str(player.total_shares_outstanding)))
+    player.current_price = amm.calculate_spot_price(base_price, Decimal(str(player.total_shares_outstanding)))
 
     # Record persistent transaction log
     now = datetime.now(timezone.utc)

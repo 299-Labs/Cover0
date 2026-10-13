@@ -1,86 +1,76 @@
 from decimal import Decimal
 
-# Base asset parameters
-BASE_PRICE = Decimal("10000000.00")  # $10M initial base price
-K_SENSITIVITY = Decimal("5000.00")   # $5,000 price increase per net circulating share
+# Sensitivity constant (Adjust this to change the curve steepness)
+# At K=2,000,000: The first 10 shares increase the price by ~$4.7M. 
+# Going from 100 to 110 shares only increases the price by ~$180k.
+K_SENSITIVITY = Decimal("2000000.00")
+MIN_PRICE_FLOOR = Decimal("500000.00") #$0.5M
 
-def calculate_spot_price(net_shares: Decimal, perf_modifier: Decimal = Decimal("0")) -> Decimal:
+def _integral(base_price: Decimal, s: Decimal) -> Decimal:
     """
-    Calculates the instantaneous spot price for a player asset.
-    P(s) = P0 + (k * s) + performance_modifier
+    Returns the Total Value Locked (area under the curve) from 0 to s shares.
+    Integral of (P0 + K * ln(x + 1)) dx
+    = P0*s + K * [ (s + 1) * ln(s + 1) - s ]
     """
-    return BASE_PRICE + (K_SENSITIVITY * net_shares) + perf_modifier
+    if s <= Decimal("0"):
+        return Decimal("0")
+    
+    s_plus_1 = s + Decimal("1")
+    # Decimal().ln() calculates the natural logarithm with high precision
+    log_area = (s_plus_1 * s_plus_1.ln()) - s
+    
+    return (base_price * s) + (K_SENSITIVITY * log_area)
 
+def calculate_spot_price(base_price: Decimal, current_shares: Decimal) -> Decimal:
+    """Calculates the instantaneous spot price at the current supply."""
+    s_plus_1 = current_shares + Decimal("1")
+    raw_spot = base_price + (K_SENSITIVITY * s_plus_1.ln())
+    return max(raw_spot, MIN_PRICE_FLOOR)
 
-def calculate_buy_cost(
-    current_shares: Decimal, 
-    buy_shares: Decimal, 
-    perf_modifier: Decimal = Decimal("0")
-) -> Decimal:
-    """
-    Calculates exact cost to purchase N shares using the integral under the bonding curve.
-    Cost = integral from S to (S + DeltaS) of P(s) ds
-    Area of trapezoid: DeltaS * (P(S1) + P(S2)) / 2
-    """
+def calculate_buy_cost(base_price: Decimal, current_shares: Decimal, buy_shares: Decimal) -> Decimal:
+    """Exact cost is the integral from S1 to S2."""
     if buy_shares <= Decimal("0"):
-        raise ValueError("buy_shares must be strictly greater than zero")
-        
+        raise ValueError("Must buy a positive number of shares")
+    
     s1 = current_shares
     s2 = current_shares + buy_shares
     
-    p1 = calculate_spot_price(s1, perf_modifier)
-    p2 = calculate_spot_price(s2, perf_modifier)
-    
-    total_cost = buy_shares * (p1 + p2) / Decimal("2")
-    return total_cost
+    cost = _integral(base_price, s2) - _integral(base_price, s1)
+    return cost
 
 
-def calculate_sell_return(
-    current_shares: Decimal, 
-    sell_shares: Decimal, 
-    perf_modifier: Decimal = Decimal("0")
-) -> Decimal:
-    """
-    Calculates exact cash returned to user when selling N shares back to the AMM curve.
-    Return = integral from (S - DeltaS) to S of P(s) ds
-    """
-    if sell_shares <= Decimal("0"):
-        raise ValueError("sell_shares must be strictly greater than zero")
-    if sell_shares > current_shares:
-        raise ValueError("Cannot sell more shares than total circulating supply")
+def calculate_sell_return(base_price: Decimal, current_shares: Decimal, sell_shares: Decimal) -> Decimal:
+    """Exact return is the integral from S1 to S2 (going backwards)."""
+    if sell_shares <= Decimal("0") or sell_shares > current_shares:
+        raise ValueError("Invalid sell amount")
         
     s1 = current_shares - sell_shares
     s2 = current_shares
     
-    p1 = calculate_spot_price(s1, perf_modifier)
-    p2 = calculate_spot_price(s2, perf_modifier)
-    
-    total_return = sell_shares * (p1 + p2) / Decimal("2")
-    return total_return
+    proceeds = _integral(base_price, s2) - _integral(base_price, s1)
+    return proceeds
 
-def calculate_trade_preview(current_shares: Decimal, side: str, shares: Decimal) -> dict:
-    """Calculates preview metrics including price impact and execution price."""
-    current_price = calculate_spot_price(current_shares)
+def calculate_trade_preview(base_price: Decimal, current_shares: Decimal, side: str, shares: Decimal) -> dict:
+    """Generates preview data for the frontend."""
+    current_spot = calculate_spot_price(base_price, current_shares)
     
     if side == "BUY":
-        total_amount = calculate_buy_cost(current_shares, shares)
+        total_amount = calculate_buy_cost(base_price, current_shares, shares)
         new_shares = current_shares + shares
-    else:
-        total_amount = calculate_sell_return(current_shares, shares)
+    else:  # SELL
+        total_amount = calculate_sell_return(base_price, current_shares, shares)
         new_shares = current_shares - shares
-
-    new_price = calculate_spot_price(new_shares)
-    execution_price = total_amount / shares if shares > Decimal("0") else current_price
-    price_impact_percent = (
-        ((new_price - current_price) / current_price) * Decimal("100")
-        if current_price > Decimal("0")
-        else Decimal("0")
-    )
-
+        
+    execution_price = total_amount / shares
+    new_spot = calculate_spot_price(base_price, new_shares)
+    
+    # Impact % relative to current spot
+    price_impact_percent = ((execution_price - current_spot) / current_spot) * Decimal("100")
+    
     return {
-        "current_price": current_price,
+        "current_price": current_spot,
         "total_amount": total_amount,
         "execution_price": execution_price,
-        "new_price": new_price,
+        "new_price": new_spot,
         "price_impact_percent": price_impact_percent,
     }

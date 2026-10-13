@@ -24,7 +24,9 @@ class Player(Base):
     name = Column(String(100), nullable=False)
     position = Column(String(10), nullable=False)
     team = Column(String(10), nullable=False)
-    current_price = Column(Numeric(12, 2), nullable=False, default=10000000.00) # $10M
+
+    base_price = Column(Numeric(12, 2), nullable=False, default=500000.00) # $500k
+    current_price = Column(Numeric(12, 2), nullable=False, default=500000.00) # $500k
     total_shares_outstanding = Column(Numeric(14, 4), nullable=False, default=1000.00)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
