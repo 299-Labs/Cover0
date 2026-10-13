@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export interface Holding {
@@ -352,4 +354,36 @@ export async function fetchTradeHistory(userId: string): Promise<Transaction[]> 
     price_per_share: Number((tx as Record<string, unknown>).price_per_share),
     total_amount: Number((tx as Record<string, unknown>).total_amount),
   })) as Transaction[];
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || null;
+}
+
+export async function fetchMyProfile() {
+  const token = await getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load user profile");
+  return res.json();
+}
+
+export async function updateMyProfile(payload: { username?: string; avatar_url?: string }) {
+  const token = await getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Profile update failed");
+  }
+  return res.json();
 }

@@ -158,6 +158,21 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class UserProfileResponse(BaseModel):
+    id: UUID
+    username: str
+    email: str
+    avatar_url: Optional[str] = None
+    cash_balance: Decimal
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
+    
 # --- HOLDING & PORTFOLIO SCHEMAS ---
 class HoldingResponse(BaseModel):
     player_id: UUID

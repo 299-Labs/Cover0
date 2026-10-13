@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, Text, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -11,6 +11,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=False)
+    avatar_url = Column(Text, nullable=True)
     cash_balance = Column(Numeric(14, 2), nullable=False, default=100000000.00) # $100M
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 

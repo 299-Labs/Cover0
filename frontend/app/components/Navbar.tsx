@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PieChart, TrendingUp, Users, Trophy } from "lucide-react";
+import { PieChart, TrendingUp, Users, Trophy, User } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -12,11 +12,12 @@ export default function Navbar() {
     { href: "/market", label: "Market", icon: TrendingUp },
     { href: "/friends", label: "Friends", icon: Users },
     { href: "/leaderboard", label: "Ranks", icon: Trophy },
+    { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#040404]/95 backdrop-blur-md border-t border-[#506c64]/30">
-      <div className="max-w-3xl mx-auto grid grid-cols-4 px-2 py-2">
+      <div className="max-w-3xl mx-auto grid grid-cols-5 px-2 py-2">
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = pathname === link.href;

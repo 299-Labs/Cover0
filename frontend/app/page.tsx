@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
+  fetchMyProfile,
   fetchDemoUser,
   fetchPortfolio,
   fetchTradeHistory,
@@ -14,6 +15,7 @@ import Navbar from "./components/Navbar";
 import PlayerDetailModal from "./components/PlayerDetailModal";
 import TradeModal from "./components/TradeModal";
 import { ArrowUpRight, ArrowDownRight, User as UserIcon } from "lucide-react";
+import { supabase } from "./lib/supabase";
 
 export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -34,13 +36,30 @@ export default function PortfolioPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const user = await fetchDemoUser();
-      setUserId(user.id);
+      // 1. Check if user is logged into Supabase Auth
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      let activeUserId: string;
+
+      if (sessionData.session) {
+        // Authenticated user: grab their real profile and ID
+        const profile = await fetchMyProfile();
+        activeUserId = profile.id;
+      } else {
+        // Fallback: use demo_trader if browsing without an account
+        const demo = await fetchDemoUser();
+        activeUserId = demo.id;
+      }
+
+      setUserId(activeUserId);
+
+      // 2. Fetch portfolio, trade history, and market players for the active user
       const [portfolioData, historyData, playersData] = await Promise.all([
-        fetchPortfolio(user.id),
-        fetchTradeHistory(user.id),
+        fetchPortfolio(activeUserId),
+        fetchTradeHistory(activeUserId),
         fetchPlayers(),
       ]);
+
       setPortfolio(portfolioData);
       setTransactions(historyData);
       setPlayers(playersData);

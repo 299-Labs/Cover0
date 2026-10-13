@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchDemoUser, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
+import { supabase } from "../lib/supabase";
+import { fetchDemoUser, fetchMyProfile, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
 import Navbar from "../components/Navbar";
-import { Trophy, Medal, Award, Zap, DollarSign, Calendar } from "lucide-react";
+import { Trophy, Medal, Award, User as UserIcon } from "lucide-react";
 
 type LeaderboardView = "nav" | "weekly" | "season";
 
@@ -15,18 +16,26 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 1. Resolve active user (Supabase session first, fallback to demo_trader)
   useEffect(() => {
     async function initUser() {
       try {
-        const user = await fetchDemoUser();
-        setCurrentUserId(user.id);
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session) {
+          const profile = await fetchMyProfile();
+          setCurrentUserId(profile.id);
+        } else {
+          const demo = await fetchDemoUser();
+          setCurrentUserId(demo.id);
+        }
       } catch (err: unknown) {
-        console.error(err);
+        console.error("Failed to resolve user identity:", err);
       }
     }
     initUser();
   }, []);
 
+  // 2. Fetch leaderboard data on tab switch
   useEffect(() => {
     async function loadBoard() {
       setLoading(true);
@@ -60,9 +69,12 @@ export default function LeaderboardPage() {
     return <span className="text-xs font-bold font-mono text-[#506c64] w-5 text-center">#{rank}</span>;
   };
 
+  const currentUserEntry = leaderboard.find((entry) => entry.user_id === currentUserId);
+
   return (
     <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">
       <div className="max-w-3xl mx-auto px-4 pt-8">
+        
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-black tracking-tight text-[#f0e9fe] flex items-center gap-2">
@@ -87,7 +99,7 @@ export default function LeaderboardPage() {
               onClick={() => setActiveTab(key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${
                 activeTab === key
-                  ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30"
+                  ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30 shadow-sm"
                   : "text-[#506c64] hover:text-[#f0e9fe]"
               }`}
             >
@@ -96,7 +108,7 @@ export default function LeaderboardPage() {
           ))}
         </div>
 
-        {/* Loading */}
+        {/* Loading State */}
         {loading && (
           <div className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-8 text-center text-[#506c64] animate-pulse">
             Calculating standings...
@@ -110,27 +122,33 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {/* Leaderboard Ranks */}
+        {/* Leaderboard Rows */}
         {!loading && !error && (
           <div className="space-y-2.5">
             {leaderboard.map((entry) => {
               const isCurrentUser = entry.user_id === currentUserId;
+
               return (
                 <Link
                   key={entry.user_id}
-                  href={`/users/${entry.user_id}`}
+                  href={isCurrentUser ? "/profile" : `/users/${entry.user_id}`}
                   className={`border rounded-xl p-4 flex items-center gap-4 transition-all block cursor-pointer ${
                     isCurrentUser
-                      ? "border-[#a6ece0]/50 bg-[#a6ece0]/5 hover:border-[#a6ece0]"
+                      ? "border-[#a6ece0] bg-[#a6ece0]/10 shadow-[0_0_24px_rgba(166,236,224,0.12)] ring-1 ring-[#a6ece0]/40"
                       : "border-[#506c64]/30 bg-[#121916] hover:border-[#506c64]/80 hover:bg-[#141e1b]"
                   }`}
                 >
+                  {/* Rank Badge */}
                   <div className="shrink-0 w-7 flex justify-center">{getRankBadge(entry.rank)}</div>
+
+                  {/* Trader Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate flex items-center gap-2 text-[#f0e9fe] text-sm">
-                      {entry.username}
+                      <span className={isCurrentUser ? "text-[#a6ece0]" : ""}>
+                        {entry.username}
+                      </span>
                       {isCurrentUser && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30">
+                        <span className="text-[10px] font-black tracking-wider px-2 py-0.5 rounded-full bg-[#a6ece0] text-[#080d0b] shadow-sm">
                           YOU
                         </span>
                       )}
@@ -149,13 +167,14 @@ export default function LeaderboardPage() {
                     </p>
                   </div>
 
+                  {/* Leaderboard Metric */}
                   <div className="text-right shrink-0">
                     <p className="text-[10px] uppercase tracking-wider text-[#506c64] font-bold">
                       {activeTab === "nav" && "Total Portfolio"}
                       {activeTab === "weekly" && "Weekly FPTS"}
                       {activeTab === "season" && "Season FPTS"}
                     </p>
-                    <p className="font-bold font-mono text-sm text-[#f0f3bd]">
+                    <p className={`font-bold font-mono text-sm ${isCurrentUser ? "text-[#a6ece0]" : "text-[#f0f3bd]"}`}>
                       {activeTab === "nav" && formatCurrency(entry.total_nav)}
                       {activeTab === "weekly" && formatFPTS(entry.weekly_fpts)}
                       {activeTab === "season" && formatFPTS(entry.season_fpts)}
