@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import urllib.request
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -147,12 +148,13 @@ def seed_database():
             db.refresh(u)
 
         # =========================================================================
-        # 4. SEED INITIAL HOLDINGS FOR DIVERSE LEADERBOARD
+        # 4. SEED INITIAL HOLDINGS & TRANSACTIONS FOR DIVERSE LEADERBOARD
         # =========================================================================
         available_players = db.query(Player).limit(10).all()
         if len(available_players) >= 5:
             all_user_ids = [demo_user.id] + [u.id for u in rival_objs]
             db.query(Holding).filter(Holding.user_id.in_(all_user_ids)).delete(synchronize_session=False)
+            db.query(Transaction).filter(Transaction.user_id.in_(all_user_ids)).delete(synchronize_session=False)
 
             holdings_matrix = [
                 (demo_user, 0, Decimal("3.0")),
@@ -167,8 +169,13 @@ def seed_database():
                 (rival_objs[3], 4, Decimal("3.5")),
             ]
 
-            for user_obj, p_idx, shares in holdings_matrix:
+            now = datetime.now(timezone.utc)
+
+            for i, (user_obj, p_idx, shares) in enumerate(holdings_matrix):
                 player = available_players[p_idx]
+                cost = shares * player.current_price
+
+                # 1. Create Holding
                 holding = Holding(
                     user_id=user_obj.id,
                     player_id=player.id,
@@ -177,8 +184,20 @@ def seed_database():
                 )
                 db.add(holding)
 
+                # 2. Create Transaction History Record with a staggered timestamp
+                tx = Transaction(
+                    user_id=user_obj.id,
+                    player_id=player.id,
+                    side="BUY",
+                    shares=shares,
+                    price_per_share=player.current_price,
+                    total_amount=cost,
+                    timestamp=now - timedelta(hours=(len(holdings_matrix) - i) * 4),
+                )
+                db.add(tx)
+
             db.commit()
-            print("Successfully assigned starter portfolios to demo trader and rivals.")
+            print("Successfully assigned starter portfolios & transaction records.")
 
     except Exception as e:
         db.rollback()

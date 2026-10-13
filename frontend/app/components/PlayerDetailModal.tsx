@@ -5,7 +5,7 @@ import { X, ShoppingBag, ArrowLeftRight, User as UserIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 type Tab = "market" | "stats" | "gamelog";
-interface Props { isOpen: boolean; onClose: () => void; playerId: string | null; userOwnedShares: number; onOpenTrade: (s: "BUY" | "SELL") => void; }
+interface Props { isOpen: boolean; onClose: () => void; playerId: string | null; userOwnedShares: number; onOpenTrade?: (s: "BUY" | "SELL") => void; }
 export default function PlayerDetailModal(props: Props) {
   const { isOpen, onClose, playerId, userOwnedShares, onOpenTrade } = props;
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
@@ -142,10 +142,16 @@ export default function PlayerDetailModal(props: Props) {
         </div>)}
 
       </div>
+      {onOpenTrade ? (
       <div className="p-4 bg-[#0b110f] border-t border-[#506c64]/30 grid grid-cols-2 gap-3 shrink-0">
         <button onClick={() => { onClose(); onOpenTrade("BUY"); }} className="py-3 px-4 rounded-2xl bg-[#a6ece0] text-[#0b110f] font-bold text-sm flex items-center justify-center gap-2"><ShoppingBag size={16} /> Trade BUY</button>
         <button disabled={userOwnedShares <= 0} onClick={() => { onClose(); onOpenTrade("SELL"); }} className="py-3 px-4 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-30"><ArrowLeftRight size={16} /> Trade SELL</button>
       </div>
+      ) : (
+      <div className="p-4 bg-[#0b110f] border-t border-[#506c64]/30 shrink-0 text-center text-[11px] font-bold uppercase tracking-wider text-[#506c64]">
+        Read-only view · trading disabled
+      </div>
+      )}
     </div>) : null}
   </div></div>);
 }

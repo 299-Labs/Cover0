@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { fetchDemoUser, fetchFriends, addFriend, Friend } from "../lib/api";
 import Navbar from "../components/Navbar";
 import { UserPlus, Users } from "lucide-react";
@@ -119,26 +120,29 @@ export default function FriendsPage() {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {friends.map((f) => (
-                  <div
-                    key={f.id}
-                    className="bg-[#121916] border border-[#506c64]/30 hover:border-[#506c64]/70 rounded-xl p-4 flex items-center justify-between gap-4 transition-all"
+                {friends.map((friend) => (
+                  <Link
+                    key={friend.id}
+                    href={`/users/${friend.friend_id}`}
+                    className="bg-[#121916] border border-[#506c64]/30 hover:border-[#506c64]/80 hover:bg-[#141e1b] rounded-xl p-4 flex items-center justify-between gap-4 transition-all block cursor-pointer"
                   >
-                    <div className="min-w-0">
-                      <p className="font-bold truncate text-[#f0e9fe]">@{f.friend_username}</p>
-                      <p className="text-xs text-[#506c64] font-medium mt-0.5">
-                        Added {new Date(f.created_at).toLocaleDateString()}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[#0b110f] border border-[#506c64]/40 flex items-center justify-center font-bold font-mono text-[#a6ece0] text-xs">
+                        {friend.friend_username.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-[#f0e9fe]">@{friend.friend_username}</p>
+                        <p className="text-xs text-[#506c64]">Friend</p>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[10px] uppercase tracking-wider text-[#506c64] font-bold">
-                        Portfolio NAV
-                      </p>
+
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider text-[#506c64] font-bold">Portfolio Value</p>
                       <p className="font-bold font-mono text-sm text-[#f0f3bd]">
-                        {formatCurrency(f.friend_nav)}
+                        {formatCurrency(friend.friend_nav)}
                       </p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

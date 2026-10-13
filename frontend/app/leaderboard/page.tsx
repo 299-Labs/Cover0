@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchDemoUser, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
 import Navbar from "../components/Navbar";
 import { Trophy, Medal, Award, Zap, DollarSign, Calendar } from "lucide-react";
@@ -115,12 +116,13 @@ export default function LeaderboardPage() {
             {leaderboard.map((entry) => {
               const isCurrentUser = entry.user_id === currentUserId;
               return (
-                <div
+                <Link
                   key={entry.user_id}
-                  className={`border rounded-xl p-4 flex items-center gap-4 transition-all ${
+                  href={`/users/${entry.user_id}`}
+                  className={`border rounded-xl p-4 flex items-center gap-4 transition-all block cursor-pointer ${
                     isCurrentUser
-                      ? "border-[#a6ece0]/50 bg-[#a6ece0]/5"
-                      : "border-[#506c64]/30 bg-[#121916] hover:border-[#506c64]/70"
+                      ? "border-[#a6ece0]/50 bg-[#a6ece0]/5 hover:border-[#a6ece0]"
+                      : "border-[#506c64]/30 bg-[#121916] hover:border-[#506c64]/80 hover:bg-[#141e1b]"
                   }`}
                 >
                   <div className="shrink-0 w-7 flex justify-center">{getRankBadge(entry.rank)}</div>
@@ -141,7 +143,7 @@ export default function LeaderboardPage() {
                         </>
                       ) : (
                         <>
-                          Total Portfolio Value: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.total_nav)}</span>
+                          NAV: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.total_nav)}</span>
                         </>
                       )}
                     </p>
@@ -159,7 +161,7 @@ export default function LeaderboardPage() {
                       {activeTab === "season" && formatFPTS(entry.season_fpts)}
                     </p>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
