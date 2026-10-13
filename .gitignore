@@ -13,7 +13,6 @@ __pycache__/
 env/
 venv/
 .pytest_cache/
-alembic.ini
 
 # Environment Variables
 .env
