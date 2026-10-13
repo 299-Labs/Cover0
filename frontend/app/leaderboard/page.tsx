@@ -3,19 +3,35 @@
 import { useEffect, useState } from "react";
 import { fetchDemoUser, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
 import Navbar from "../components/Navbar";
-import { Trophy, Medal, Award } from "lucide-react";
+import { Trophy, Medal, Award, Zap, DollarSign, Calendar } from "lucide-react";
+
+type LeaderboardView = "nav" | "weekly" | "season";
 
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<LeaderboardView>("nav");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadData() {
+    async function initUser() {
       try {
-        const [user, board] = await Promise.all([fetchDemoUser(), fetchLeaderboard()]);
+        const user = await fetchDemoUser();
         setCurrentUserId(user.id);
+      } catch (err: unknown) {
+        console.error(err);
+      }
+    }
+    initUser();
+  }, []);
+
+  useEffect(() => {
+    async function loadBoard() {
+      setLoading(true);
+      setError(null);
+      try {
+        const board = await fetchLeaderboard(activeTab);
         setLeaderboard(board);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Failed to load leaderboard";
@@ -24,8 +40,8 @@ export default function LeaderboardPage() {
         setLoading(false);
       }
     }
-    loadData();
-  }, []);
+    loadBoard();
+  }, [activeTab]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("en-US", {
@@ -33,6 +49,8 @@ export default function LeaderboardPage() {
       currency: "USD",
       maximumFractionDigits: 0,
     }).format(val);
+
+  const formatFPTS = (val: number) => `${val.toFixed(1)} pts`;
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return <Trophy size={18} className="text-[#f0f3bd]" />;
@@ -49,13 +67,38 @@ export default function LeaderboardPage() {
           <h1 className="text-2xl font-black tracking-tight text-[#f0e9fe] flex items-center gap-2">
             Global Ranks
           </h1>
-          <p className="text-xs text-[#506c64] font-medium mt-0.5">Ranked by Total Portfolio Value</p>
+          <p className="text-xs text-[#506c64] font-medium mt-0.5">
+            Real-time standings across portfolio value and fantasy output
+          </p>
         </div>
 
-        {/* Skeleton Loading State */}
+        {/* View Switcher Tabs */}
+        <div className="flex bg-[#121916] border border-[#506c64]/30 p-1 rounded-xl mb-6">
+          {(
+            [
+              ["nav", "Total Portfolio Value"],
+              ["weekly", "Weekly FPTS"],
+              ["season", "Season FPTS"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                activeTab === key
+                  ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30"
+                  : "text-[#506c64] hover:text-[#f0e9fe]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Loading */}
         {loading && (
           <div className="bg-[#121916] border border-[#506c64]/30 rounded-2xl p-8 text-center text-[#506c64] animate-pulse">
-            Loading rankings...
+            Calculating standings...
           </div>
         )}
 
@@ -91,15 +134,29 @@ export default function LeaderboardPage() {
                       )}
                     </p>
                     <p className="text-xs text-[#506c64] font-medium mt-0.5">
-                      Cash: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.cash_balance)}</span> | Assets: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.holdings_value)}</span>
+                      {activeTab === "nav" ? (
+                        <>
+                          Cash: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.cash_balance)}</span> | Assets:{" "}
+                          <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.holdings_value)}</span>
+                        </>
+                      ) : (
+                        <>
+                          Total Portfolio Value: <span className="font-mono text-[#f0f3bd]/80">{formatCurrency(entry.total_nav)}</span>
+                        </>
+                      )}
                     </p>
                   </div>
+
                   <div className="text-right shrink-0">
                     <p className="text-[10px] uppercase tracking-wider text-[#506c64] font-bold">
-                      Total Portfolio Value
+                      {activeTab === "nav" && "Total Portfolio"}
+                      {activeTab === "weekly" && "Weekly FPTS"}
+                      {activeTab === "season" && "Season FPTS"}
                     </p>
                     <p className="font-bold font-mono text-sm text-[#f0f3bd]">
-                      {formatCurrency(entry.total_nav)}
+                      {activeTab === "nav" && formatCurrency(entry.total_nav)}
+                      {activeTab === "weekly" && formatFPTS(entry.weekly_fpts)}
+                      {activeTab === "season" && formatFPTS(entry.season_fpts)}
                     </p>
                   </div>
                 </div>

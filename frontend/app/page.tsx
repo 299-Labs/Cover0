@@ -83,6 +83,17 @@ export default function PortfolioPage() {
     return holding ? holding.shares_owned : 0;
   };
 
+  const sortedHoldings = portfolio
+    ? [...portfolio.holdings].sort((a, b) => {
+        // Primary sort: Total market value (position size) descending
+        if (b.market_value !== a.market_value) {
+          return b.market_value - a.market_value;
+        }
+        // Secondary fallback: Shares owned descending
+        return b.shares_owned - a.shares_owned;
+      })
+    : [];
+
   return (
     <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">
       <div className="max-w-3xl mx-auto px-4 pt-8">
@@ -154,19 +165,19 @@ export default function PortfolioPage() {
                 <h2 className="text-base font-bold text-[#a6ece0] flex items-center gap-2">
                   <span>Active Investments</span>
                   <span className="text-xs bg-[#506c64]/30 text-[#a6ece0] px-2 py-0.5 rounded-full font-mono">
-                    {portfolio.holdings.length}
+                    {sortedHoldings.length}
                   </span>
                 </h2>
               </div>
 
-              {portfolio.holdings.length === 0 ? (
+              {sortedHoldings.length === 0 ? (
                 <div className="bg-[#121916] border border-dashed border-[#506c64]/40 rounded-2xl p-8 text-center text-[#506c64]">
                   <p className="text-sm font-medium">No active player investments.</p>
                   <p className="text-xs mt-1 text-[#506c64]/80">Explore the market tab to build your roster.</p>
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {portfolio.holdings.map((item) => {
+                  {sortedHoldings.map((item) => {
                     const pnl = Number(item.unrealized_pnl);
                     const isProfit = pnl >= 0;
                     return (

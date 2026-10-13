@@ -202,6 +202,10 @@ class LeaderboardEntry(BaseModel):
     cash_balance: Decimal
     holdings_value: Decimal
     total_nav: Decimal
+    weekly_fpts: Decimal
+    season_fpts: Decimal
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TransactionResponse(BaseModel):

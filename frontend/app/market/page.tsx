@@ -74,15 +74,17 @@ export default function MarketPage() {
     return holding ? holding.shares_owned : 0;
   };
 
-  const filteredPlayers = players.filter((player) => {
-    const query = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      player.name.toLowerCase().includes(query) ||
-      player.team.toLowerCase().includes(query);
-    const matchesPosition =
-      selectedPosition === "ALL" || player.position === selectedPosition;
-    return matchesSearch && matchesPosition;
-  });
+  const filteredPlayers = players
+    .filter((player) => {
+      const query = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        player.name.toLowerCase().includes(query) ||
+        player.team.toLowerCase().includes(query);
+      const matchesPosition =
+        selectedPosition === "ALL" || player.position === selectedPosition;
+      return matchesSearch && matchesPosition;
+    })
+    .sort((a, b) => b.current_price - a.current_price);
 
   return (
     <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">

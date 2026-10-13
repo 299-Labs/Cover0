@@ -75,3 +75,56 @@ class Transaction(Base):
 
     user = relationship("User", backref="transactions")
     player = relationship("Player", backref="transactions")
+
+
+class PortfolioSnapshot(Base):
+    __tablename__ = "portfolio_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    season = Column(String(10), nullable=False)
+    week = Column(Numeric(4, 0), nullable=False)
+    shares_owned = Column(Numeric(12, 4), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("User", backref="snapshots")
+    player = relationship("Player", backref="snapshots")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "player_id", "season", "week", name="unique_user_player_snapshot"),
+    )
+
+
+class PlayerWeeklyScore(Base):
+    __tablename__ = "player_weekly_scores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    season = Column(String(10), nullable=False)
+    week = Column(Numeric(4, 0), nullable=False)
+    pts_ppr = Column(Numeric(8, 2), nullable=False, default=0.00)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    player = relationship("Player", backref="weekly_scores")
+
+    __table_args__ = (
+        UniqueConstraint("player_id", "season", "week", name="unique_player_week_score"),
+    )
+
+
+class UserWeeklyScore(Base):
+    __tablename__ = "user_weekly_scores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    season = Column(String(10), nullable=False)
+    week = Column(Numeric(4, 0), nullable=False)
+    fpts = Column(Numeric(10, 2), nullable=False, default=0.00)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", backref="weekly_scores")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "season", "week", name="unique_user_week_score"),
+    )

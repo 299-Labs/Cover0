@@ -281,6 +281,8 @@ export interface LeaderboardEntry {
   cash_balance: number;
   holdings_value: number;
   total_nav: number;
+  weekly_fpts: number;
+  season_fpts: number;
 }
 
 export async function fetchFriends(userId: string): Promise<Friend[]> {
@@ -304,10 +306,24 @@ export async function addFriend(userId: string, friendUsername: string): Promise
   return res.json();
 }
 
-export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/leaderboard`, { cache: "no-store" });
+export async function fetchLeaderboard(
+  sortBy: "nav" | "weekly" | "season" = "nav",
+  week?: number
+): Promise<LeaderboardEntry[]> {
+  const params = new URLSearchParams({ sort_by: sortBy });
+  if (week) params.append("week", week.toString());
+
+  const res = await fetch(`${API_BASE_URL}/leaderboard?${params.toString()}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch leaderboard");
-  return res.json();
+  const data = await res.json();
+  return data.map((entry: Record<string, unknown>) => ({
+    ...entry,
+    cash_balance: Number(entry.cash_balance),
+    holdings_value: Number(entry.holdings_value),
+    total_nav: Number(entry.total_nav),
+    weekly_fpts: Number(entry.weekly_fpts),
+    season_fpts: Number(entry.season_fpts),
+  }));
 }
 
 export interface Transaction {

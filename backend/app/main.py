@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import friends, leaderboard, market, portfolio, trade, users
+from app.routers import admin, friends, leaderboard, market, portfolio, trade, users
 from app.db import Base, engine
 import app.models
 
@@ -30,6 +30,7 @@ app.include_router(users.router)
 app.include_router(portfolio.router)
 app.include_router(friends.router)
 app.include_router(leaderboard.router)
+app.include_router(admin.router)
 
 # Create any missing database tables in PostgreSQL on server startup
 Base.metadata.create_all(bind=engine)
