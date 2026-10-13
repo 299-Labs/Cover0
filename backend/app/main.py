@@ -1,14 +1,31 @@
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.routers import admin, friends, leaderboard, market, portfolio, trade, users
 from app.db import Base, engine
 import app.models
+from app.services.scheduler import start_scheduler, stop_scheduler
 
+
+# 1. Define the Lifespan event to manage the scheduler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start the background cron jobs
+    start_scheduler()
+    yield
+    # Shutdown: Cleanly stop the background jobs
+    stop_scheduler()
+
+
+# 2. Attach lifespan to the FastAPI instance
 app = FastAPI(
     title="Cover0 API",
     description="Real-Time Fantasy Sports Market Engine API",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Parse origins from environment or default to localhost
