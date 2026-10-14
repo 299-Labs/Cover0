@@ -53,10 +53,16 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/Cover0` },
+      options: {
+        redirectTo: `${window.location.origin}/Cover0`,
+      },
     });
+
+    if (error) {
+      console.error("Google login failed:", error.message);
+    }
   };
 
   // Light green typed text, password dots, caret, and autofill overrides
