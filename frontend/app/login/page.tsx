@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
@@ -19,6 +19,28 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 1. Listen for auth changes (handles email verification links & Google redirects)
+  useEffect(() => {
+    // If user is already authenticated or just returned with a session token
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace("/");
+      }
+    };
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        router.replace("/");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -34,7 +56,11 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { username: username || email.split("@")[0] } },
+          options: {
+            data: { username: username || email.split("@")[0] },
+            // Ensures confirmation email links land on your /Cover0 base path
+            emailRedirectTo: `${window.location.origin}/Cover0`,
+          },
         });
         if (error) throw error;
         setMessage("Verification link sent! Check your email to confirm your account.");
@@ -53,6 +79,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -61,7 +88,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      console.error("Google login failed:", error.message);
+      setError(error.message);
     }
   };
 
@@ -96,7 +123,7 @@ export default function LoginPage() {
         <div className="flex bg-[#121916] border border-[#506c64]/30 p-1 rounded-xl mb-6">
           <button
             onClick={() => { setMode("signin"); setError(null); setMessage(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               mode === "signin" ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30" : "text-[#506c64]"
             }`}
           >
@@ -104,7 +131,7 @@ export default function LoginPage() {
           </button>
           <button
             onClick={() => { setMode("signup"); setError(null); setMessage(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               mode === "signup" ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30" : "text-[#506c64]"
             }`}
           >
@@ -112,7 +139,7 @@ export default function LoginPage() {
           </button>
           <button
             onClick={() => { setMode("forgot"); setError(null); setMessage(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               mode === "forgot" ? "bg-[#a6ece0]/15 text-[#a6ece0] border border-[#a6ece0]/30" : "text-[#506c64]"
             }`}
           >
@@ -207,7 +234,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full py-2.5 bg-[#080d0b] hover:bg-[#141e1b] border border-[#506c64]/30 rounded-xl text-xs font-bold text-[#a6ece0] transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#080d0b] hover:bg-[#141e1b] border border-[#506c64]/30 rounded-xl text-xs font-bold text-[#a6ece0] transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -223,7 +250,7 @@ export default function LoginPage() {
 
         {/* Privacy Policy */}
         <div className="flex justify-center mt-6">
-          <Link href="/privacy" className="text-[11px] text-[#506c64] hover:text-[#a6ece0]">
+          <Link href="/privacy" className="text-[11px] text-[#506c64] hover:text-[#a6ece0] cursor-pointer">
             Privacy Policy
           </Link>
         </div>
