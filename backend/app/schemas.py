@@ -166,8 +166,7 @@ class UserProfileResponse(BaseModel):
     cash_balance: Decimal
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UpdateProfileRequest(BaseModel):
     username: Optional[str] = None
@@ -195,19 +194,24 @@ class PortfolioResponse(BaseModel):
     holdings: List[HoldingResponse]
 
 
-class FriendResponse(BaseModel):
+# --- LEAGUE SCHEMAS ---
+class LeagueCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=50)
+    user_id: UUID
+
+class LeagueJoinRequest(BaseModel):
+    invite_code: str = Field(..., min_length=3, max_length=10)
+    user_id: UUID
+
+class LeagueResponse(BaseModel):
     id: UUID
-    friend_id: UUID
-    friend_username: str
-    friend_nav: Decimal
+    name: str
+    invite_code: str
+    created_by: UUID
+    member_count: int
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class AddFriendRequest(BaseModel):
-    user_id: UUID
-    friend_username: str
 
 
 class LeaderboardEntry(BaseModel):

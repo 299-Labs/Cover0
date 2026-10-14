@@ -268,11 +268,12 @@ export async function executeTrade(payload: {
   return res.json();
 }
 
-export interface Friend {
+export interface League {
   id: string;
-  friend_id: string;
-  friend_username: string;
-  friend_nav: number;
+  name: string;
+  invite_code: string;
+  created_by: string;
+  member_count: number;
   created_at: string;
 }
 
@@ -287,25 +288,63 @@ export interface LeaderboardEntry {
   season_fpts: number;
 }
 
-export async function fetchFriends(userId: string): Promise<Friend[]> {
-  const res = await fetch(`${API_BASE_URL}/friends/${userId}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch friends");
+export async function fetchUserLeagues(userId: string): Promise<League[]> {
+  const res = await fetch(`${API_BASE_URL}/leagues/user/${userId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch your leagues");
   return res.json();
 }
 
-export async function addFriend(userId: string, friendUsername: string): Promise<Friend> {
-  const res = await fetch(`${API_BASE_URL}/friends`, {
+export async function createLeague(payload: { name: string; user_id: string }): Promise<League> {
+  const res = await fetch(`${API_BASE_URL}/leagues`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, friend_username: friendUsername }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Failed to add friend");
+    throw new Error(err.detail || "Failed to create league");
   }
 
   return res.json();
+}
+
+export async function joinLeague(payload: { invite_code: string; user_id: string }): Promise<League> {
+  const res = await fetch(`${API_BASE_URL}/leagues/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to join league");
+  }
+
+  return res.json();
+}
+
+export async function fetchLeagueLeaderboard(
+  leagueId: string,
+  sortBy: "nav" | "weekly" | "season" = "nav",
+  week?: number
+): Promise<LeaderboardEntry[]> {
+  const params = new URLSearchParams({ sort_by: sortBy });
+  if (week) params.append("week", week.toString());
+
+  const res = await fetch(`${API_BASE_URL}/leagues/${leagueId}/leaderboard?${params.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to fetch league standings");
+  const data = await res.json();
+  return data.map((entry: Record<string, unknown>) => ({
+    ...entry,
+    cash_balance: Number(entry.cash_balance),
+    holdings_value: Number(entry.holdings_value),
+    total_nav: Number(entry.total_nav),
+    weekly_fpts: Number(entry.weekly_fpts),
+    season_fpts: Number(entry.season_fpts),
+  }));
 }
 
 export async function fetchLeaderboard(

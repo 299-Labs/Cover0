@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, Text, String, Numeric, DateTime, ForeignKey, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, Text, String, Numeric, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -50,17 +50,32 @@ class Holding(Base):
         UniqueConstraint("user_id", "player_id", name="unique_user_player"),
     )
 
-class Friendship(Base):
-    __tablename__ = "friendships"
+class League(Base):
+    __tablename__ = "leagues"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    friend_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(50), nullable=False)
+    invite_code = Column(String(10), unique=True, nullable=False, index=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
+    creator = relationship("User", foreign_keys=[created_by])
+    members = relationship("LeagueMember", back_populates="league", cascade="all, delete-orphan")
+
+
+class LeagueMember(Base):
+    __tablename__ = "league_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    league_id = Column(UUID(as_uuid=True), ForeignKey("leagues.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    joined_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    league = relationship("League", back_populates="members")
+    user = relationship("User")
+
     __table_args__ = (
-        UniqueConstraint("user_id", "friend_id", name="unique_friendship"),
-        CheckConstraint("user_id != friend_id", name="no_self_friend"),
+        UniqueConstraint("league_id", "user_id", name="unique_league_member"),
     )
 
 

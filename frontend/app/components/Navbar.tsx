@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PieChart, TrendingUp, Users, Trophy, User } from "lucide-react";
+import { PieChart, TrendingUp, Orbit, Trophy, User } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -10,7 +10,7 @@ export default function Navbar() {
   const links = [
     { href: "/", label: "Portfolio", icon: PieChart },
     { href: "/market", label: "Market", icon: TrendingUp },
-    { href: "/friends", label: "Friends", icon: Users },
+    { href: "/leagues", label: "Leagues", icon: Orbit },
     { href: "/leaderboard", label: "Ranks", icon: Trophy },
     { href: "/profile", label: "Profile", icon: User },
   ];

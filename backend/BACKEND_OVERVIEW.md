@@ -7,7 +7,7 @@
 - **Framework:** FastAPI `0.142.2` (`backend/app/main.py` — title `Cover0 API`, description `Real-Time Fantasy Sports Market Engine API`, version `0.1.0`). Lifespan starts/stops APScheduler. `Base.metadata.create_all(bind=engine)` runs on import (auto-creates missing tables).
 - **ORM:** SQLAlchemy `2.1.3` (DeclarativeBase in `app/db.py`, `SessionLocal(autocommit=False, autoflush=False)`, `get_db()` yields per-request session).
 - **DB:** PostgreSQL 16 (`docker-compose.yml` service `cover0_postgres`, host `5433->5432`, db `cover0`). `DATABASE_URL` defaults to `postgresql://postgres:postgres@localhost:5433/cover0`.
-- **Migrations:** Alembic `1.20.0` (`backend/alembic/`, `alembic.ini`). Chain: `7bf20648 (core tables)` → `b7c2d8e4 (transactions)` → `03bd1bf0 (players.base_price)` → `4df17988 (users.avatar_url, head)`.
+- **Migrations:** Alembic `1.20.0` (`backend/alembic/`, `alembic.ini`). Chain: `7bf20648 (core tables)` → `b7c2d8e4 (transactions)` → `03bd1bf0 (players.base_price)` → `4df17988 (users.avatar_url)` → `5e9c1f28 (friendships → leagues/league_members, head)`.
 - **Validation:** Pydantic `2.13.5` + `email-validator` (used by `SupportTicketRequest.user_email: EmailStr`).
 - **Server:** Uvicorn `0.54.0`. CORS origins from `ALLOWED_ORIGINS` env (default `http://localhost:3000,http://127.0.0.1:3000`), `allow_credentials=True`.
 - **Scheduler:** APScheduler `3.11.3` (`AsyncIOScheduler`, ET cron triggers in `app/services/scheduler.py`).
@@ -30,12 +30,13 @@ backend/
       7bf2064872a4_create_core_tables.py
       b7c2d8e4f1a3_add_transactions_table.py
       03bd1bf03d1b_add_base_price_and_scoring_tables.py  # actually only adds players.base_price
-      4df1798847ac_add_user_auth.py                      # adds users.avatar_url (head)
+      4df1798847ac_add_user_auth.py                      # adds users.avatar_url
+      5e9c1f28b4a0_replace_friendships_with_leagues.py  # drops friendships; adds leagues + league_members (head)
   app/
     main.py               # app + CORS + lifespan scheduler + 8 router includes + GET /health
     db.py                 # engine, SessionLocal, Base, get_db()
-    models.py             # User, Player, Holding, Friendship, Transaction, PortfolioSnapshot, PlayerWeeklyScore, UserWeeklyScore
-    schemas.py            # trade, player-detail, user, holding/portfolio, friend, leaderboard, transaction schemas
+    models.py             # User, Player, Holding, League, LeagueMember, Transaction, PortfolioSnapshot, PlayerWeeklyScore, UserWeeklyScore
+    schemas.py            # trade, player-detail, user, holding/portfolio, league, leaderboard, transaction schemas
     auth.py               # get_current_user (Supabase JWT → auto-provision User)
     utils.py              # get_headshot_url(external_id)
     seed.py               # Sleeper sync + demo/rival users + starter portfolios (python app/seed.py)
@@ -45,7 +46,7 @@ backend/
       trade.py            # POST /preview, POST /execute, GET /history/{user_id}
       portfolio.py        # GET /api/v1/portfolio/{user_id}
       users.py            # GET|PATCH /api/v1/users/me (auth), GET /demo (legacy)
-      friends.py          # GET /{user_id}, POST / (add by username)
+      leagues.py           # POST / (create, creator auto-joins), POST /join, GET /user/{user_id}, GET /{league_id}/leaderboard?sort_by=nav|weekly|season&week&season
       leaderboard.py      # GET /?sort_by=nav|weekly|season&week&season
       admin.py            # POST /snapshot/trigger, POST /scores/sync (NO auth)
       support.py          # POST /api/v1/support/contact (Resend)
@@ -59,6 +60,7 @@ backend/
     test_amm.py           # zero-share baseline, floor, leader pricing, buy/sell symmetry, validation, previews, Simpson-vs-integral
     test_trade.py         # preview/execute/history expectations computed live from the new AMM
     test_api_routes.py    # health, demo user, market list, empty portfolio
+    test_leagues.py       # create/join/duplicate/404s, user league listing, member-scoped leaderboard, friends routes gone
     test_no_recalibration.py  # seed-only baselines: no /recalibrate-base-prices route, no Tuesday cron
 ```
 
@@ -69,7 +71,8 @@ All PKs are `UUID(as_uuid=True), default=uuid.uuid4`. Money/shares are `Numeric/
 - **User (`users`):** `id, username[unique 50], email[unique 255], avatar_url[Text nullable — added by head migration 4df17988], cash_balance[Numeric(14,2) default 100000000.00 = $100M], created_at[naive utcnow]`. `holdings → Holding cascade delete-orphan`; transactions/snapshots/scores via `backref`.
 - **Player (`players`):** `id, external_id[unique 100 — Sleeper numeric id as string], name[100], position[10: QB/RB/WR/TE], team[10], base_price[Numeric(12,2) default 500000.00 = $0.5M — per-player anchor from projections], current_price[Numeric(12,2) default 500000.00], total_shares_outstanding[Numeric(14,4) default 1000.00 — seed always writes 0.00], created_at`. `holdings` cascade.
 - **Holding (`holdings`):** `id, user_id[FK CASCADE], player_id[FK CASCADE], shares_owned[Numeric(12,4) default 0], avg_buy_price[Numeric(12,2) default 0], updated_at`. `UniqueConstraint(user_id, player_id)`.
-- **Friendship (`friendships`):** `id, user_id[FK CASCADE], friend_id[FK CASCADE — 2nd ref to users.id, no ORM relationship], created_at`. `unique_friendship(user_id,friend_id)` + `no_self_friend(user_id != friend_id)`. Directed edge (A→B only, no mirror row).
+- **League (`leagues`):** `id, name[String(50)], invite_code[String(10) unique + index — 6-char uppercase from ambiguity-free alphabet], created_by[FK users CASCADE], created_at`. `creator → User`, `members → LeagueMember cascade delete-orphan`.
+- **LeagueMember (`league_members`):** `id, league_id[FK CASCADE], user_id[FK CASCADE], joined_at`. `unique_league_member(league_id,user_id)`. Symmetric membership that scopes league leaderboards (replaces the old directed `Friendship` edge).
 - **Transaction (`transactions` — persistent ledger):** `id, user_id[FK CASCADE], player_id[FK CASCADE], side[String(10) BUY|SELL], shares[Numeric(12,4)], price_per_share[Numeric(12,2) = average execution price], total_amount[Numeric(14,2)], timestamp[tz-aware UTC now]`.
 - **PortfolioSnapshot (`portfolio_snapshots` — Thursday freeze for scoring):** `id, user_id[FK CASCADE], player_id[FK CASCADE], season[String(10) e.g. "2026"], week[Numeric(4,0)], shares_owned[Numeric(12,4)], created_at`. `UniqueConstraint(user_id, player_id, season, week)`.
 - **PlayerWeeklyScore (`player_weekly_scores`):** `id, player_id[FK CASCADE], season, week[Numeric(4,0)], pts_ppr[Numeric(8,2) default 0], updated_at`. `UniqueConstraint(player_id, season, week)`.
@@ -93,14 +96,14 @@ Base prefix `/api/v1` + `GET /health → {status:ok, app:Cover0 Backend}`. **No 
 
 - **Portfolio** (`routers/portfolio.py`): `GET /api/v1/portfolio/{user_id}` returns NAV plus per-holding market value and unrealized PnL. 404 on unknown user. Loads all players ONCE for live spot prices (no N+1): holding current price and NAV market value come from `amm.batch_compute_spot_prices` over the whole book.
 - **Users** (`routers/users.py`): `GET` and `PATCH /api/v1/users/me` behind Supabase JWT with auto-provision; legacy `GET /api/v1/users/demo` for demo_trader. Router-local profile schemas shadow `schemas.py`.
-- **Friends** (`routers/friends.py`): list by user id plus add-by-username with live NAV per friend.
+- **Leagues** (`routers/leagues.py`): create (unique 6-char invite code, creator auto-joins as member #1), join by code (404 unknown code, 400 already a member), per-user list with live member counts, and a league-scoped leaderboard mirroring the global one (identical NAV/FPTS computation restricted to members; 404 unknown league).
 - **Leaderboard** (`routers/leaderboard.py`): `GET /` with `sort_by=nav|weekly|season`, week/season defaulting from Sleeper state (2026 / week 6 fallback). Ranks assigned post-sort from 1.
 - **Admin** (`routers/admin.py`, NO auth): `POST /snapshot/trigger` and `POST /scores/sync`, both accepting optional season/week. Baseline `base_price` is **seed-only** — no admin route may modify it after seeding.
 - **Support** (`routers/support.py`): contact endpoint relayed via Resend, with local-log fallback when no API key is set.
 
 ## 6. Schemas (`app/schemas.py`)
 
-Trade request/response plus live preview shape; rich `PlayerDetailResponse` with bio, ownership, rankings, price history, stat breakdowns, game logs, and past seasons; user profile, holdings/portfolio, friends, leaderboard entries with weekly/season FPTS, and transaction rows with headshots.
+Trade request/response plus live preview shape; rich `PlayerDetailResponse` with bio, ownership, rankings, price history, stat breakdowns, game logs, and past seasons; user profile, holdings/portfolio, league create/join/response, leaderboard entries with weekly/season FPTS, and transaction rows with headshots.
 
 ## 7. Services
 
@@ -112,12 +115,12 @@ Seed pulls the full Sleeper catalog plus season projections, prices by projected
 
 ## 9. Tests
 
-SQLite in-memory harness with one demo user and one zero-share player (with base_price); API route tests for health, demo, market, and portfolio; AMM tests assert the zero-share baseline equals `base_price`, the hard floor, leader pricing, buy/sell symmetry, validation, BUY/SELL preview shapes, and that Simpson execution pricing matches a 1,000-step trapezoidal integral within $0.05; trade tests compute expectations live from the AMM; cleanup tests prove `POST /recalibrate-base-prices` 404s, the Tuesday recalibration cron no longer exists, and `scoring.recalibrate_market_baselines` / `sleeper.get_weekly_projections` are gone. 20 passed.
+SQLite in-memory harness with one demo user and one zero-share player (with base_price); API route tests for health, demo, market, and portfolio; AMM tests assert the zero-share baseline equals `base_price`, the hard floor, leader pricing, buy/sell symmetry, validation, BUY/SELL preview shapes, and that Simpson execution pricing matches a 1,000-step trapezoidal integral within $0.05; trade tests compute expectations live from the AMM; cleanup tests prove `POST /recalibrate-base-prices` 404s, the Tuesday recalibration cron no longer exists, and `scoring.recalibrate_market_baselines` / `sleeper.get_weekly_projections` are gone; league tests cover create with creator auto-membership, join/duplicate/bad-code paths, per-user listing, and a member-scoped leaderboard where high-NAV outsiders are excluded. 26 passed.
 
 ## 10. Gotchas for LLM
 
-Global per-player supply feeds the league-wide softmax; reads compute spots on the fly (stale `current_price` columns are display-only except the just-traded player) and every execute locks only user + traded player. Preview sell checks global supply while execution checks the user holding; trade and admin routes are unauthenticated; scoring uses raw-share snapshots; detail endpoint is heavy and fail-soft; profile schemas exist twice; created timestamps mix naive and aware values; friendships are directed; week columns are numeric; `sleeper.py` may carry a BOM (read with `utf-8-sig`); baseline `base_price` is written only at seed time — no cron or admin route may change it.
+Global per-player supply feeds the league-wide softmax; reads compute spots on the fly (stale `current_price` columns are display-only except the just-traded player) and every execute locks only user + traded player. Preview sell checks global supply while execution checks the user holding; trade and admin routes are unauthenticated; scoring uses raw-share snapshots; detail endpoint is heavy and fail-soft; profile schemas exist twice; created timestamps mix naive and aware values; league membership scopes leaderboards (the league leaderboard values holdings at persisted `current_price`, same as the global board — not live AMM spots); week columns are numeric; `sleeper.py` may carry a BOM (read with `utf-8-sig`); baseline `base_price` is written only at seed time — no cron or admin route may change it.
 
 ## 11. Copy-Paste Context Prompt
 
-> Cover0 FastAPI backend with league-wide prior-weighted softmax P_i=floor+V_float·softmax(λ(S)·ln w0_i + s_i/b(S)), b(S)=150+0.03·S, λ(S)=1/(1+S/5000); Simpson 3-point execution pricing; compute-on-read market list/detail, trade preview/execute/history persisting only the traded player's spot, live-price portfolio NAV, Supabase authed profiles, friends, sortable leaderboard, unauthenticated admin snapshot/scores triggers (baselines are seed-only), Resend support, Thursday snapshot plus Sun/Mon/Tue scoring crons, zero-share-baseline Sleeper-synced seed with demo and rivals.
+> Cover0 FastAPI backend with league-wide prior-weighted softmax P_i=floor+V_float·softmax(λ(S)·ln w0_i + s_i/b(S)), b(S)=150+0.03·S, λ(S)=1/(1+S/5000); Simpson 3-point execution pricing; compute-on-read market list/detail, trade preview/execute/history persisting only the traded player's spot, live-price portfolio NAV, Supabase authed profiles, invite-code private leagues with member-scoped leaderboards, sortable global leaderboard, unauthenticated admin snapshot/scores triggers (baselines are seed-only), Resend support, Thursday snapshot plus Sun/Mon/Tue scoring crons, zero-share-baseline Sleeper-synced seed with demo and rivals.

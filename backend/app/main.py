@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import admin, friends, leaderboard, market, portfolio, support, trade, users
+from app.routers import admin, leaderboard, leagues, market, portfolio, support, trade, users
 from app.db import Base, engine
 import app.models
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -45,7 +45,7 @@ app.include_router(market.router)
 app.include_router(trade.router)
 app.include_router(users.router)
 app.include_router(portfolio.router)
-app.include_router(friends.router)
+app.include_router(leagues.router)
 app.include_router(leaderboard.router)
 app.include_router(admin.router)
 app.include_router(support.router)
