@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { fetchDemoUser, fetchFriends, addFriend, Friend } from "../lib/api";
+import { supabase } from "../lib/supabase";
+import { fetchMyProfile, fetchFriends, addFriend, Friend } from "../lib/api";
 import Navbar from "../components/Navbar";
 import { UserPlus, Users } from "lucide-react";
 
 export default function FriendsPage() {
+  const router = useRouter();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [inputUsername, setInputUsername] = useState("");
@@ -17,9 +20,19 @@ export default function FriendsPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const user = await fetchDemoUser();
-      setUserId(user.id);
-      const friendsData = await fetchFriends(user.id);
+      // 1. Enforce Authentication — redirect unauthenticated visitors to /login
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData.session) {
+        router.replace("/login");
+        return;
+      }
+
+      // 2. Fetch authenticated profile & friends list (no demo fallback)
+      const profile = await fetchMyProfile();
+      setUserId(profile.id);
+
+      const friendsData = await fetchFriends(profile.id);
       setFriends(friendsData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load friends";
@@ -27,7 +40,7 @@ export default function FriendsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadData();
@@ -81,7 +94,7 @@ export default function FriendsPage() {
             <button
               type="submit"
               disabled={adding || !inputUsername.trim()}
-              className="px-4 py-2.5 rounded-xl bg-[#a6ece0] text-[#080d0b] text-sm font-bold transition-all hover:bg-[#a6ece0]/90 disabled:opacity-30 disabled:cursor-not-allowed shadow-md"
+              className="px-4 py-2.5 rounded-xl bg-[#a6ece0] text-[#080d0b] text-sm font-bold transition-all hover:bg-[#a6ece0]/90 disabled:opacity-30 disabled:cursor-not-allowed shadow-md cursor-pointer"
             >
               {adding ? "Adding..." : "Add"}
             </button>

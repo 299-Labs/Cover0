@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   fetchMyProfile,
-  fetchDemoUser,
   fetchPortfolio,
   fetchTradeHistory,
   fetchPlayers,
@@ -18,6 +18,7 @@ import { ArrowUpRight, ArrowDownRight, User as UserIcon } from "lucide-react";
 import { supabase } from "./lib/supabase";
 
 export default function PortfolioPage() {
+  const router = useRouter();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -36,24 +37,19 @@ export default function PortfolioPage() {
 
   const loadData = useCallback(async () => {
     try {
-      // 1. Check if user is logged into Supabase Auth
+      // 1. Enforce Authentication — redirect to /login if no active session
       const { data: sessionData } = await supabase.auth.getSession();
 
-      let activeUserId: string;
-
-      if (sessionData.session) {
-        // Authenticated user: grab their real profile and ID
-        const profile = await fetchMyProfile();
-        activeUserId = profile.id;
-      } else {
-        // Fallback: use demo_trader if browsing without an account
-        const demo = await fetchDemoUser();
-        activeUserId = demo.id;
+      if (!sessionData.session) {
+        router.replace("/login");
+        return;
       }
 
+      const profile = await fetchMyProfile();
+      const activeUserId = profile.id;
       setUserId(activeUserId);
 
-      // 2. Fetch portfolio, trade history, and market players for the active user
+      // 2. Fetch authenticated user data
       const [portfolioData, historyData, playersData] = await Promise.all([
         fetchPortfolio(activeUserId),
         fetchTradeHistory(activeUserId),
@@ -69,7 +65,7 @@ export default function PortfolioPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadData();
@@ -104,11 +100,9 @@ export default function PortfolioPage() {
 
   const sortedHoldings = portfolio
     ? [...portfolio.holdings].sort((a, b) => {
-        // Primary sort: Total market value (position size) descending
         if (b.market_value !== a.market_value) {
           return b.market_value - a.market_value;
         }
-        // Secondary fallback: Shares owned descending
         return b.shares_owned - a.shares_owned;
       })
     : [];

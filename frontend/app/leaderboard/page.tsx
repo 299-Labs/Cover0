@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
-import { fetchDemoUser, fetchMyProfile, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
+import { fetchMyProfile, fetchLeaderboard, LeaderboardEntry } from "../lib/api";
 import Navbar from "../components/Navbar";
-import { Trophy, Medal, Award, User as UserIcon } from "lucide-react";
+import { Trophy, Medal, Award } from "lucide-react";
 
 type LeaderboardView = "nav" | "weekly" | "season";
 
@@ -16,7 +16,7 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Resolve active user (Supabase session first, fallback to demo_trader)
+  // 1. Resolve active user (only if signed in; do not fall back to demo_trader)
   useEffect(() => {
     async function initUser() {
       try {
@@ -25,11 +25,11 @@ export default function LeaderboardPage() {
           const profile = await fetchMyProfile();
           setCurrentUserId(profile.id);
         } else {
-          const demo = await fetchDemoUser();
-          setCurrentUserId(demo.id);
+          setCurrentUserId(null);
         }
       } catch (err: unknown) {
         console.error("Failed to resolve user identity:", err);
+        setCurrentUserId(null);
       }
     }
     initUser();
@@ -68,8 +68,6 @@ export default function LeaderboardPage() {
     if (rank === 3) return <Award size={18} className="text-[#506c64]" />;
     return <span className="text-xs font-bold font-mono text-[#506c64] w-5 text-center">#{rank}</span>;
   };
-
-  const currentUserEntry = leaderboard.find((entry) => entry.user_id === currentUserId);
 
   return (
     <div className="min-h-screen bg-[#080d0b] text-[#f0e9fe] pb-28 antialiased">
@@ -126,7 +124,7 @@ export default function LeaderboardPage() {
         {!loading && !error && (
           <div className="space-y-2.5">
             {leaderboard.map((entry) => {
-              const isCurrentUser = entry.user_id === currentUserId;
+              const isCurrentUser = Boolean(currentUserId && entry.user_id === currentUserId);
 
               return (
                 <Link

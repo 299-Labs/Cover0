@@ -22,8 +22,8 @@ from app.services import amm
 
 Base.metadata.create_all(bind=engine)
 
+SLEEPER_STATE_URL = "https://api.sleeper.app/v1/state/nfl"
 SLEEPER_PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl"
-SLEEPER_PROJECTIONS_URL = "https://api.sleeper.app/v1/projections/nfl/regular/2026"
 ALLOWED_POSITIONS = {"QB", "RB", "WR", "TE"}
 MIN_PRICE_FLOOR = Decimal("500000.00")  # $0.5M
 
@@ -36,22 +36,61 @@ RIVAL_TRADERS = [
 
 
 def fetch_sleeper_players():
-    """Fetches NFL players and calculates base price from season projections."""
+    """Fetches NFL players and calculates base price from current week projections."""
+    # 1. Determine current NFL state (season, season_type, week)
+    print("Fetching current NFL state from Sleeper API...")
+    try:
+        state_req = urllib.request.Request(
+            SLEEPER_STATE_URL,
+            headers={"User-Agent": "Cover0-App/1.0"},
+        )
+        with urllib.request.urlopen(state_req, timeout=10) as response:
+            state_data = json.loads(response.read().decode())
+    except Exception as e:
+        print(f"Warning: Failed to fetch NFL state ({e}). Defaulting to 2026 Regular Season, Week 1.")
+        state_data = {"season": "2026", "season_type": "regular", "week": 1}
+
+    season = str(state_data.get("season") or "2026")
+    season_type = state_data.get("season_type") if state_data.get("season_type") in ("regular", "post") else "regular"
+    week = state_data.get("week") or state_data.get("display_week") or 1
+    if not isinstance(week, int) or week < 1:
+        week = 1
+
+    projections_url = f"https://api.sleeper.app/v1/projections/nfl/{season_type}/{season}/{week}"
+
+    # 2. Fetch full catalog
     print("Fetching full player catalog from Sleeper API...")
     req = urllib.request.Request(
         SLEEPER_PLAYERS_URL,
-        headers={"User-Agent": "Cover0-App/1.0"}
+        headers={"User-Agent": "Cover0-App/1.0"},
     )
     with urllib.request.urlopen(req, timeout=10) as response:
         player_data = json.loads(response.read().decode())
 
-    print("Fetching Season Projections from Sleeper API...")
-    req = urllib.request.Request(
-        SLEEPER_PROJECTIONS_URL,
-        headers={"User-Agent": "Cover0-App/1.0"}
-    )
-    with urllib.request.urlopen(req, timeout=10) as response:
-        projections_data = json.loads(response.read().decode())
+    # 3. Fetch weekly projections
+    print(f"Fetching Week {week} projections ({season_type} {season}) from {projections_url}...")
+    try:
+        req = urllib.request.Request(
+            projections_url,
+            headers={"User-Agent": "Cover0-App/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            projections_raw = json.loads(response.read().decode())
+    except Exception as e:
+        print(f"Warning: Failed to fetch projections from {projections_url} ({e}). Using floor pricing.")
+        projections_raw = {}
+
+    # Normalize response into dict keyed by player external ID (supports both list and dict shapes)
+    if isinstance(projections_raw, list):
+        projections_data = {
+            str(item.get("player_id")): item
+            for item in projections_raw
+            if isinstance(item, dict) and item.get("player_id")
+        }
+    elif isinstance(projections_raw, dict):
+        projections_data = {str(k): v for k, v in projections_raw.items()}
+    else:
+        projections_data = {}
 
     players = []
     for player_id, p in player_data.items():
@@ -68,12 +107,12 @@ def fetch_sleeper_players():
             and first_name
             and last_name
         ):
-            proj = projections_data.get(player_id, {})
+            proj = projections_data.get(str(player_id), {})
             proj_fpts = Decimal(str(proj.get("pts_ppr", 0.0) or 0.0))
 
-            # Base price = (Proj / 17) * $1,000,000 floored at $0.5M
-            calc_price = (proj_fpts / Decimal("17.0")) * Decimal("1000000.00")
-            base_price = max(calc_price, MIN_PRICE_FLOOR)
+            # Base price = Weekly Proj FPTS * $1,000,000 floored at $0.5M
+            calc_price = proj_fpts * Decimal("1000000.00")
+            base_price = max(round(calc_price, 2), MIN_PRICE_FLOOR)
 
             players.append({
                 "external_id": str(player_id),
@@ -97,6 +136,8 @@ def seed_database():
         added_count = 0
         updated_count = 0
 
+        # Zero-share baseline: every spot opens exactly at base_price under the
+        # prior-weighted softmax (equal shares -> weights reduce to priors).
         for p in sleeper_players:
             existing = db.query(Player).filter(Player.external_id == p["external_id"]).first()
             if not existing:
@@ -115,21 +156,8 @@ def seed_database():
                 existing.name = p["name"]
                 existing.position = p["position"]
                 existing.team = p["team"]
-
-                # =====================================================================
-                # [OPTIONAL / ONE-TIME RUN] CALIBRATE PRICES TO PROJECTIONS
-                # Comment this block out once your baseline prices are established.
-                # After commenting out, prices will only move via trading in the AMM.
-                # ---------------------------------------------------------------------
                 existing.base_price = p["base_price"]
-                current_shares = Decimal(str(existing.total_shares_outstanding or 0))
-                existing.current_price = amm.calculate_spot_price(
-                    base_price=p["base_price"],
-                    current_shares=current_shares,
-                )
-                # ---------------------------------------------------------------------
-                # =====================================================================
-
+                existing.current_price = p["base_price"]
                 updated_count += 1
 
         db.commit()
@@ -194,14 +222,20 @@ def seed_database():
 
                 for i, (user_obj, p_idx, shares) in enumerate(holdings_matrix):
                     player = available_players[p_idx]
-                    cost = shares * player.current_price
+
+                    # Starter legs run through the real cost function so cash,
+                    # averages, and the AMM supply stay consistent.
+                    live_players = db.query(Player).all()
+                    leg_cost = amm.calculate_buy_cost(str(player.id), live_players, shares)
+                    leg_spot = amm.calculate_single_spot_price(str(player.id), live_players)
+                    cost = leg_cost
 
                     # 1. Holding
                     holding = Holding(
                         user_id=user_obj.id,
                         player_id=player.id,
                         shares_owned=shares,
-                        avg_buy_price=player.current_price,
+                        avg_buy_price=(cost / shares if shares != Decimal("0") else leg_spot),
                     )
                     db.add(holding)
 
@@ -211,16 +245,19 @@ def seed_database():
                         player_id=player.id,
                         side="BUY",
                         shares=shares,
-                        price_per_share=player.current_price,
+                        price_per_share=(cost / shares if shares != Decimal("0") else leg_spot),
                         total_amount=cost,
                         timestamp=now - timedelta(hours=(len(holdings_matrix) - i) * 4),
                     )
                     db.add(tx)
 
-                    # 3. Register shares into AMM supply and advance spot price
-                    new_supply = Decimal(str(player.total_shares_outstanding)) + shares
-                    player.total_shares_outstanding = new_supply
-                    player.current_price = amm.calculate_spot_price(player.base_price, new_supply)
+                    # 3. Register shares into AMM supply and refresh this
+                    # player's spot (other players are computed on read).
+                    player.total_shares_outstanding = Decimal(str(player.total_shares_outstanding)) + shares
+                    db.flush()
+                    league = db.query(Player).all()
+                    player.current_price = amm.calculate_single_spot_price(str(player.id), league)
+                    db.flush()
 
                 db.commit()
                 print("Successfully assigned initial starter portfolios, transactions, and calibrated AMM supply.")

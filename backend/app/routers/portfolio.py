@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from app.db import get_db
 from app import models, schemas
+from app.services import amm
 from app.utils import get_headshot_url
 from decimal import Decimal
 
@@ -14,14 +15,19 @@ def get_portfolio(user_id: UUID, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    holdings = db.query(models.Holding).filter(models.Holding.user_id == user.id).all()
+    all_players = db.query(models.Player).all()
+    live_prices = amm.batch_compute_spot_prices(all_players)
+    by_id = {str(p.id): p for p in all_players}
+
     holdings_response = []
     total_holdings_value = Decimal("0.00")
 
-    for holding in user.holdings:
-        player = holding.player
-        current_price = player.current_price
-        market_value = holding.shares_owned * current_price
-        unrealized_pnl = (current_price - holding.avg_buy_price) * holding.shares_owned
+    for holding in holdings:
+        player = by_id.get(str(holding.player_id)) or holding.player
+        current_price = Decimal(str(live_prices.get(str(holding.player_id), player.current_price)))
+        market_value = Decimal(str(holding.shares_owned)) * current_price
+        unrealized_pnl = (current_price - Decimal(str(holding.avg_buy_price))) * Decimal(str(holding.shares_owned))
 
         total_holdings_value += market_value
 
@@ -40,7 +46,7 @@ def get_portfolio(user_id: UUID, db: Session = Depends(get_db)):
             )
         )
 
-    total_nav = user.cash_balance + total_holdings_value
+    total_nav = Decimal(str(user.cash_balance)) + total_holdings_value
 
     return schemas.PortfolioResponse(
         user_id=user.id,

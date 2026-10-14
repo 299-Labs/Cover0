@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app import models, schemas
+from app.services import amm
 from app.utils import get_headshot_url
 from app.services import sleeper
 
@@ -13,11 +14,15 @@ router = APIRouter(prefix="/api/v1/market", tags=["Market"])
 
 @router.get("/players", response_model=List[schemas.PlayerResponse])
 def list_players(db: Session = Depends(get_db)):
-    """Fetch all players in the market with dynamic headshot URLs."""
+    """Fetch all players with live compute-on-read spot prices."""
     players = db.query(models.Player).all()
+    live_prices = amm.batch_compute_spot_prices(players)
     res = []
     for p in players:
         p_dict = schemas.PlayerResponse.model_validate(p)
+        spot = live_prices.get(str(p.id))
+        if spot is not None:
+            p_dict.current_price = spot
         p_dict.headshot_url = get_headshot_url(p.external_id)
         res.append(p_dict)
     return res
@@ -47,20 +52,23 @@ def get_player(player_id: UUID, db: Session = Depends(get_db)):
     except Exception:
         historical_data = {"game_logs": [], "past_seasons": []}
 
-    # 2. Compute Cover0 Platform Market-Cap Ownership Metrics
+    # 2. Compute Cover0 Platform Market-Cap Ownership Metrics (live spots).
     # Percentage = money invested in this player / total money invested platform-wide.
     all_players = db.query(models.Player).all()
+    live_spots_detail = amm.batch_compute_spot_prices(all_players)
     mcaps = {}
     total_platform_money_invested = 0.0
     for p in all_players:
         try:
-            mcap = float(p.total_shares_outstanding or 0) * float(p.current_price or 0)
+            live_px = float(live_spots_detail.get(str(p.id), p.current_price or 0))
+            mcap = float(p.total_shares_outstanding or 0) * live_px
         except Exception:
             mcap = 0.0
         mcaps[p.id] = mcap
         total_platform_money_invested += mcap
     try:
-        player_money_invested = float(player.total_shares_outstanding or 0) * float(player.current_price or 0)
+        player_live_px = float(live_spots_detail.get(str(player.id), player.current_price or 0))
+        player_money_invested = float(player.total_shares_outstanding or 0) * player_live_px
     except Exception:
         player_money_invested = 0.0
     ownership_pct = round((player_money_invested / total_platform_money_invested) * 100, 2) if total_platform_money_invested > 0 else 0.0
@@ -101,7 +109,7 @@ def get_player(player_id: UUID, db: Session = Depends(get_db)):
             act_fpts = season_actual_cache.get(p.id, 0.0)
             proj_fpts = season_proj_cache.get(p.id, 0.0)
             try:
-                p_price = float(p.current_price or 0) or 1.0
+                p_price = float(live_spots_detail.get(str(p.id), p.current_price or 0)) or 1.0
             except Exception:
                 p_price = 1.0
             player_scores.append({
@@ -112,7 +120,7 @@ def get_player(player_id: UUID, db: Session = Depends(get_db)):
     else:
         player_scores = [
             {"id": p.id, "shares": mcaps.get(p.id, 0.0), "mcap": mcaps.get(p.id, 0.0),
-             "fpts": float(p.current_price or 0), "value": 1.0, "proj_value": 1.0}
+             "fpts": float(live_spots_detail.get(str(p.id), p.current_price or 0)), "value": 1.0, "proj_value": 1.0}
             for p in all_players
         ]
     fpts_sorted = sorted(player_scores, key=lambda x: x["fpts"], reverse=True)
@@ -140,18 +148,20 @@ def get_player(player_id: UUID, db: Session = Depends(get_db)):
         .order_by(models.Transaction.timestamp.asc())
         .all()
     )
+    live_px_detail = live_spots_detail.get(str(player.id), player.current_price)
     history = [
         schemas.PricePoint(
             timestamp=player.created_at or datetime.now(timezone.utc),
-            price=player.current_price if not transactions else transactions[0].price_per_share,
+            price=live_px_detail if not transactions else transactions[0].price_per_share,
         )
     ]
     for tx in transactions:
         history.append(schemas.PricePoint(timestamp=tx.timestamp, price=tx.price_per_share))
-    history.append(schemas.PricePoint(timestamp=datetime.now(timezone.utc), price=player.current_price))
+    history.append(schemas.PricePoint(timestamp=datetime.now(timezone.utc), price=live_px_detail))
 
     # 5. Assemble Full Response
     res = schemas.PlayerDetailResponse.model_validate(player)
+    res.current_price = live_px_detail
     res.headshot_url = get_headshot_url(player.external_id)
     try:
         res.current_week = int(stats_proj.get("current_week", 1) or 1)

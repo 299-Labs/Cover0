@@ -36,7 +36,8 @@ def db_session():
         name="Patrick Mahomes",
         position="QB",
         team="KC",
-        current_price=Decimal("10000000.00"),
+        base_price=Decimal("1500000.00"),
+        current_price=Decimal("1500000.00"),
         total_shares_outstanding=Decimal("0.00")
     )
 

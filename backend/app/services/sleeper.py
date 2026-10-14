@@ -1,4 +1,4 @@
-﻿import json
+import json
 import time
 import urllib.request
 from typing import Dict, Any, Optional, List

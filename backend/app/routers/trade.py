@@ -16,29 +16,25 @@ router = APIRouter(prefix="/api/v1/trade", tags=["Trading"])
 @router.post("/preview", response_model=schemas.TradePreviewResponse)
 def preview_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
     """Generates real-time price impact, total cost/payout, and execution estimates."""
-    player = db.query(models.Player).filter(models.Player.id == trade.player_id).first()
-    if not player:
+    all_players = db.query(models.Player).all()
+    player_exists = any(str(p.id) == str(trade.player_id) for p in all_players)
+    if not player_exists:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    current_shares = Decimal(str(player.total_shares_outstanding))
-    trade_shares = Decimal(str(trade.shares))
-
-    if trade.side == "SELL" and trade_shares > current_shares:
-        raise HTTPException(
-            status_code=400, detail="Cannot sell more shares than total circulating supply"
+    try:
+        calc = amm.calculate_trade_preview(
+            player_id=str(trade.player_id),
+            players=all_players,
+            side=trade.side,
+            shares=Decimal(str(trade.shares)),
         )
-
-    calc = amm.calculate_trade_preview(
-        base_price=Decimal(str(player.base_price)),
-        current_shares=current_shares, 
-        side=trade.side, 
-        shares=trade_shares
-    )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return schemas.TradePreviewResponse(
-        player_id=player.id,
+        player_id=trade.player_id,
         side=trade.side,
-        shares=trade_shares,
+        shares=Decimal(str(trade.shares)),
         current_price=calc["current_price"],
         total_amount=calc["total_amount"],
         execution_price=calc["execution_price"],
@@ -49,7 +45,7 @@ def preview_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
 
 @router.post("/execute", response_model=schemas.TradeResponse)
 def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
-    """Executes a BUY or SELL order, updates balances & supply, and logs the transaction."""
+    """Executes a BUY or SELL. Locks user + traded player; reads rest of book lock-free."""
     user = db.query(models.User).filter(models.User.id == trade.user_id).with_for_update().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -58,87 +54,99 @@ def execute_trade(trade: schemas.TradeRequest, db: Session = Depends(get_db)):
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    holding = db.query(models.Holding).filter(
-        models.Holding.user_id == user.id,
-        models.Holding.player_id == player.id
-    ).first()
-
-    current_shares = Decimal(str(player.total_shares_outstanding))
+    # Lightweight snapshot of the book for the AMM denominator (read-only).
+    all_players = db.query(models.Player.id, models.Player.base_price, models.Player.total_shares_outstanding).all()
+    pid = str(player.id)
     trade_shares = Decimal(str(trade.shares))
-    base_price = Decimal(str(player.base_price))
+    side = str(trade.side or "").upper()
 
-    if trade.side == "BUY":
-        cost = amm.calculate_buy_cost(base_price, current_shares, trade_shares)
-        if Decimal(str(user.cash_balance)) < cost:
-            raise HTTPException(status_code=400, detail="Insufficient cash balance")
+    try:
+        if side == "BUY":
+            cost = amm.calculate_buy_cost(pid, all_players, trade_shares)
+            if Decimal(str(user.cash_balance)) < cost:
+                raise HTTPException(status_code=400, detail="Insufficient cash balance")
 
-        user.cash_balance = Decimal(str(user.cash_balance)) - cost
-        player.total_shares_outstanding = current_shares + trade_shares
+            user.cash_balance = Decimal(str(user.cash_balance)) - cost
+            player.total_shares_outstanding = Decimal(str(player.total_shares_outstanding)) + trade_shares
 
-        if not holding:
-            holding = models.Holding(
-                user_id=user.id,
-                player_id=player.id,
-                shares_owned=trade_shares,
-                avg_buy_price=cost / trade_shares,
-            )
-            db.add(holding)
+            holding = db.query(models.Holding).filter(
+                models.Holding.user_id == user.id,
+                models.Holding.player_id == player.id,
+            ).first()
+            if not holding:
+                holding = models.Holding(
+                    user_id=user.id,
+                    player_id=player.id,
+                    shares_owned=trade_shares,
+                    avg_buy_price=cost / trade_shares,
+                )
+                db.add(holding)
+            else:
+                old_shares = Decimal(str(holding.shares_owned))
+                old_cost = old_shares * Decimal(str(holding.avg_buy_price))
+                new_total_shares = old_shares + trade_shares
+                holding.shares_owned = new_total_shares
+                holding.avg_buy_price = (old_cost + cost) / new_total_shares
+
+            execution_amount = cost
+
+        elif side == "SELL":
+            holding = db.query(models.Holding).filter(
+                models.Holding.user_id == user.id,
+                models.Holding.player_id == player.id,
+            ).first()
+            if not holding or Decimal(str(holding.shares_owned)) < trade_shares:
+                raise HTTPException(status_code=400, detail="Insufficient shares owned")
+
+            proceeds = amm.calculate_sell_return(pid, all_players, trade_shares)
+
+            user.cash_balance = Decimal(str(user.cash_balance)) + proceeds
+            player.total_shares_outstanding = Decimal(str(player.total_shares_outstanding)) - trade_shares
+
+            holding.shares_owned = Decimal(str(holding.shares_owned)) - trade_shares
+            if holding.shares_owned == Decimal("0"):
+                db.delete(holding)
+
+            execution_amount = proceeds
         else:
-            old_shares = Decimal(str(holding.shares_owned))
-            old_cost = old_shares * Decimal(str(holding.avg_buy_price))
-            new_total_shares = old_shares + trade_shares
-            holding.shares_owned = new_total_shares
-            holding.avg_buy_price = (old_cost + cost) / new_total_shares
+            raise HTTPException(status_code=400, detail="Side must be BUY or SELL")
 
-        execution_amount = cost
+        # Persist ONLY the traded player's new spot (computed on POST-trade supply).
+        post_players = db.query(models.Player.id, models.Player.base_price, models.Player.total_shares_outstanding).all()
+        player.current_price = amm.calculate_single_spot_price(pid, post_players)
 
-    else:  # SELL
-        if not holding or Decimal(str(holding.shares_owned)) < trade_shares:
-            raise HTTPException(status_code=400, detail="Insufficient shares owned")
+        now = datetime.now(timezone.utc)
+        price_per_share = execution_amount / trade_shares
 
-        proceeds = amm.calculate_sell_return(base_price, current_shares, trade_shares)
+        transaction = models.Transaction(
+            user_id=user.id,
+            player_id=player.id,
+            side=side,
+            shares=trade_shares,
+            price_per_share=price_per_share,
+            total_amount=execution_amount,
+            timestamp=now,
+        )
+        db.add(transaction)
 
-        user.cash_balance = Decimal(str(user.cash_balance)) + proceeds
-        player.total_shares_outstanding = current_shares - trade_shares
+        db.commit()
+        db.refresh(transaction)
+        db.refresh(player)
 
-        holding.shares_owned = Decimal(str(holding.shares_owned)) - trade_shares
-        if holding.shares_owned == Decimal("0"):
-            db.delete(holding)
-
-        execution_amount = proceeds
-
-    # Update spot price based on new supply
-    player.current_price = amm.calculate_spot_price(base_price, Decimal(str(player.total_shares_outstanding)))
-
-    # Record persistent transaction log
-    now = datetime.now(timezone.utc)
-    price_per_share = execution_amount / trade_shares
-
-    transaction = models.Transaction(
-        user_id=user.id,
-        player_id=player.id,
-        side=trade.side,
-        shares=trade_shares,
-        price_per_share=price_per_share,
-        total_amount=execution_amount,
-        timestamp=now
-    )
-    db.add(transaction)
-
-    db.commit()
-    db.refresh(transaction)
-
-    return schemas.TradeResponse(
-        transaction_id=transaction.id,
-        user_id=user.id,
-        player_id=player.id,
-        side=trade.side,
-        shares=trade_shares,
-        execution_price=price_per_share,
-        total_amount=execution_amount,
-        new_cash_balance=user.cash_balance,
-        timestamp=transaction.timestamp,
-    )
+        return schemas.TradeResponse(
+            transaction_id=transaction.id,
+            user_id=user.id,
+            player_id=player.id,
+            side=side,
+            shares=trade_shares,
+            execution_price=price_per_share,
+            total_amount=execution_amount,
+            new_cash_balance=user.cash_balance,
+            timestamp=transaction.timestamp,
+        )
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/history/{user_id}", response_model=List[schemas.TransactionResponse])
