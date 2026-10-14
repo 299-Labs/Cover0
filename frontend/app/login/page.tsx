@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "../lib/supabase";
 import Navbar from "../components/Navbar";
 import { LogIn, UserPlus, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
@@ -213,6 +214,13 @@ export default function LoginPage() {
             </>
           )}
         </form>
+
+        {/* Privacy Policy */}
+        <div className="flex justify-center mt-6">
+          <Link href="/privacy" className="text-[11px] text-[#506c64] hover:text-[#a6ece0]">
+            Privacy Policy
+          </Link>
+        </div>
       </div>
       <Navbar />
     </div>
