@@ -4,6 +4,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,11 @@ from app.services import sleeper
 router = APIRouter(prefix="/api/v1/leagues", tags=["Leagues"])
 
 INVITE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+MAX_LEAGUES_PER_USER = 10
+
+
+class LeagueLeaveRequest(BaseModel):
+    user_id: UUID
 
 
 def _generate_unique_invite_code(db: Session, length: int = 6) -> str:
@@ -28,14 +34,34 @@ def _generate_unique_invite_code(db: Session, length: int = 6) -> str:
 
 @router.post("", response_model=schemas.LeagueResponse, status_code=status.HTTP_201_CREATED)
 def create_league(req: schemas.LeagueCreateRequest, db: Session = Depends(get_db)):
-    """Create a new private league and automatically add the creator as member #1."""
+    """Create a new private league with validation and 10-league cap."""
+    clean_name = req.name.strip()
+    if len(clean_name) < 3 or len(clean_name) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="League name must be between 3 and 50 characters.",
+        )
+
     user = db.query(models.User).filter(models.User.id == req.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Enforce 10 league limit
+    user_league_count = (
+        db.query(func.count(models.LeagueMember.id))
+        .filter(models.LeagueMember.user_id == user.id)
+        .scalar()
+        or 0
+    )
+    if user_league_count >= MAX_LEAGUES_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"League limit reached. You can belong to a maximum of {MAX_LEAGUES_PER_USER} leagues.",
+        )
+
     invite_code = _generate_unique_invite_code(db)
     league = models.League(
-        name=req.name.strip(),
+        name=clean_name,
         invite_code=invite_code,
         created_by=user.id,
     )
@@ -60,10 +86,23 @@ def create_league(req: schemas.LeagueCreateRequest, db: Session = Depends(get_db
 
 @router.post("/join", response_model=schemas.LeagueResponse, status_code=status.HTTP_200_OK)
 def join_league(req: schemas.LeagueJoinRequest, db: Session = Depends(get_db)):
-    """Join a private league using its unique invite code."""
+    """Join a private league with invite code (enforcing 10 league limit)."""
     user = db.query(models.User).filter(models.User.id == req.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Enforce 10 league limit
+    user_league_count = (
+        db.query(func.count(models.LeagueMember.id))
+        .filter(models.LeagueMember.user_id == user.id)
+        .scalar()
+        or 0
+    )
+    if user_league_count >= MAX_LEAGUES_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"League limit reached. You can belong to a maximum of {MAX_LEAGUES_PER_USER} leagues.",
+        )
 
     code = req.invite_code.strip().upper()
     league = db.query(models.League).filter(models.League.invite_code == code).first()
@@ -100,6 +139,56 @@ def join_league(req: schemas.LeagueJoinRequest, db: Session = Depends(get_db)):
         member_count=member_count,
         created_at=league.created_at,
     )
+
+
+@router.post("/{league_id}/leave", status_code=status.HTTP_200_OK)
+def leave_league(
+    league_id: UUID,
+    req: LeagueLeaveRequest,
+    db: Session = Depends(get_db),
+):
+    """Leave a league. If creator leaves, transfers ownership to next member or disbands if empty."""
+    league = db.query(models.League).filter(models.League.id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    membership = (
+        db.query(models.LeagueMember)
+        .filter(
+            models.LeagueMember.league_id == league_id,
+            models.LeagueMember.user_id == req.user_id,
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=400, detail="You are not a member of this league")
+
+    # If the creator is leaving
+    if league.created_by == req.user_id:
+        next_member = (
+            db.query(models.LeagueMember)
+            .filter(
+                models.LeagueMember.league_id == league_id,
+                models.LeagueMember.user_id != req.user_id,
+            )
+            .order_by(models.LeagueMember.joined_at.asc())
+            .first()
+        )
+        if next_member:
+            league.created_by = next_member.user_id
+            db.delete(membership)
+            db.commit()
+            return {"status": "ok", "message": "Left league. Ownership transferred to next oldest member."}
+        else:
+            # Sole member leaving deletes the league
+            db.delete(membership)
+            db.delete(league)
+            db.commit()
+            return {"status": "ok", "message": "Left league. League was disbanded as you were the only member."}
+
+    db.delete(membership)
+    db.commit()
+    return {"status": "ok", "message": "Successfully left the league."}
 
 
 @router.get("/user/{user_id}", response_model=list[schemas.LeagueResponse])

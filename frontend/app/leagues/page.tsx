@@ -9,11 +9,13 @@ import {
   fetchUserLeagues,
   createLeague,
   joinLeague,
+  leaveLeague,
   fetchLeagueLeaderboard,
   League,
   LeaderboardEntry,
 } from "../lib/api";
 import Navbar from "../components/Navbar";
+import ConfirmModal from "../components/ConfirmModal";
 import {
   Plus,
   Copy,
@@ -21,7 +23,8 @@ import {
   Trophy,
   Medal,
   Award,
-  Orbit
+  Orbit,
+  LogOut
 } from "lucide-react";
 
 type LeaderboardView = "nav" | "weekly" | "season";
@@ -46,11 +49,25 @@ function LeaguesContent() {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const validateLeagueName = (name: string): string | null => {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return "League name cannot be empty.";
+    if (trimmed.length < 3) return "League name must be at least 3 characters.";
+    if (trimmed.length > 50) return "League name cannot exceed 50 characters.";
+    if (!/^[a-zA-Z0-9 _'-]+$/.test(trimmed)) {
+      return "Only letters, numbers, spaces, hyphens, and apostrophes are allowed.";
+    }
+    return null;
+  };
 
   // Alerts & UX feedback
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Check for ?join=CODE in URL query params
   useEffect(() => {
@@ -123,11 +140,16 @@ function LeaguesContent() {
   // Create League Handler
   const handleCreateLeague = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUserId || !newLeagueName.trim()) return;
+    if (!currentUserId) return;
+
+    const validationMsg = validateLeagueName(newLeagueName);
+    if (validationMsg) {
+      setCreateError(validationMsg);
+      return;
+    }
 
     setCreating(true);
-    setError(null);
-    setSuccessMsg(null);
+    setCreateError(null);
 
     try {
       const created = await createLeague({
@@ -140,7 +162,7 @@ function LeaguesContent() {
       await loadLeagues(created.id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create league";
-      setError(msg);
+      setCreateError(msg);
     } finally {
       setCreating(false);
     }
@@ -178,6 +200,23 @@ function LeaguesContent() {
     navigator.clipboard.writeText(joinUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleConfirmLeave = async () => {
+    if (!activeLeague || !currentUserId) return;
+
+    setLeaving(true);
+    setError(null);
+    try {
+      const res = await leaveLeague(activeLeague.id, currentUserId);
+      setSuccessMsg(res.message);
+      setShowLeaveModal(false);
+      await loadLeagues();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to leave league");
+    } finally {
+      setLeaving(false);
+    }
   };
 
   const formatCurrency = (val: number) =>
@@ -320,13 +359,24 @@ function LeaguesContent() {
                 </p>
               </div>
 
-              <button
-                onClick={handleCopyInviteLink}
-                className="px-3.5 py-2 rounded-xl bg-[#080d0b] border border-[#506c64]/40 hover:border-[#a6ece0]/50 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer text-[#a6ece0]"
-              >
-                {copied ? <Check size={14} className="text-[#a6ece0]" /> : <Copy size={14} />}
-                {copied ? "Link Copied!" : "Copy Invite Link"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyInviteLink}
+                  className="px-3.5 py-2 rounded-xl bg-[#080d0b] border border-[#506c64]/40 hover:border-[#a6ece0]/50 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer text-[#a6ece0]"
+                >
+                  {copied ? <Check size={14} className="text-[#a6ece0]" /> : <Copy size={14} />}
+                  {copied ? "Link Copied!" : "Copy Invite Link"}
+                </button>
+
+                <button
+                  onClick={() => setShowLeaveModal(true)}
+                  disabled={leaving}
+                  title="Leave this league"
+                  className="p-2 rounded-xl bg-[#080d0b] border border-rose-500/30 hover:border-rose-500 text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer disabled:opacity-40"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Metric Switcher Tabs */}
@@ -427,40 +477,68 @@ function LeaguesContent() {
 
         {/* Create League Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
             <div className="bg-[#121916] border border-[#506c64]/40 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
               <h3 className="text-lg font-black text-[#f0e9fe] mb-1">Create Private League</h3>
               <p className="text-xs text-[#506c64] mb-4">
-                Pick a league name. An invite link will be generated instantly for your friends.
+                Pick a league name (3–50 characters). An invite code will be generated instantly for your friends.
               </p>
 
+              {createError && (
+                <div className="mb-4 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl p-3 text-xs font-medium flex items-center gap-2">
+                  <span>{createError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleCreateLeague}>
-                <div className="mb-4">
-                  <label className="text-[11px] uppercase tracking-wider font-bold text-[#a6ece0] block mb-2">
-                    League Name
-                  </label>
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] uppercase tracking-wider font-bold text-[#a6ece0]">
+                      League Name
+                    </label>
+                    <span
+                      className={`text-[10px] font-mono ${
+                        newLeagueName.trim().length > 50 || (newLeagueName.trim().length > 0 && newLeagueName.trim().length < 3)
+                          ? "text-rose-400"
+                          : "text-[#506c64]"
+                      }`}
+                    >
+                      {newLeagueName.trim().length}/50
+                    </span>
+                  </div>
+
                   <input
                     value={newLeagueName}
-                    onChange={(e) => setNewLeagueName(e.target.value)}
+                    onChange={(e) => {
+                      setNewLeagueName(e.target.value);
+                      if (createError) setCreateError(null);
+                    }}
                     placeholder="e.g. Sunday Degens"
                     maxLength={50}
                     autoFocus
-                    className="w-full bg-[#080d0b] border border-[#506c64]/30 rounded-xl px-4 py-2.5 text-sm text-[#f0e9fe] placeholder-[#506c64] focus:outline-none focus:border-[#a6ece0]/50 transition-all font-medium"
+                    className={`w-full bg-[#080d0b] border rounded-xl px-4 py-2.5 text-sm text-[#f0e9fe] placeholder-[#506c64] focus:outline-none transition-all font-medium ${
+                      createError ? "border-rose-500/50 focus:border-rose-400" : "border-[#506c64]/30 focus:border-[#a6ece0]/50"
+                    }`}
                   />
                 </div>
 
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setCreateError(null);
+                      setNewLeagueName("");
+                    }}
+                    disabled={creating}
                     className="px-4 py-2 rounded-xl text-xs font-bold text-[#506c64] hover:text-[#f0e9fe] transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={creating || !newLeagueName.trim()}
-                    className="px-5 py-2 rounded-xl bg-[#a6ece0] text-[#080d0b] text-xs font-bold hover:bg-[#a6ece0]/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    disabled={creating || newLeagueName.trim().length < 3}
+                    className="px-5 py-2 rounded-xl bg-[#a6ece0] text-[#080d0b] text-xs font-bold hover:bg-[#a6ece0]/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-md"
                   >
                     {creating ? "Creating..." : "Create League"}
                   </button>
@@ -472,6 +550,17 @@ function LeaguesContent() {
 
       </div>
       <Navbar />
+
+      <ConfirmModal
+        isOpen={showLeaveModal}
+        onClose={() => setShowLeaveModal(false)}
+        onConfirm={handleConfirmLeave}
+        title={`Leave ${activeLeague?.name || "League"}?`}
+        description="Are you sure you want to leave this league? If you are the creator, ownership will transfer to the next member. If you are the sole member, the league will be disbanded."
+        confirmText="Leave League"
+        variant="danger"
+        loading={leaving}
+      />
     </div>
   );
 }

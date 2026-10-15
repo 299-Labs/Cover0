@@ -94,7 +94,7 @@ export default function LoginPage() {
           throw new Error(availability.message || "This username is already taken. Please choose another.");
         }
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -104,6 +104,12 @@ export default function LoginPage() {
           },
         });
         if (error) throw error;
+
+        // Supabase returns an empty identities array when email enumeration protection is on and the email is taken
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+          throw new Error("An account with this email already exists. Please Sign In.");
+        }
+
         setMessage("Verification link sent! Check your email to confirm your account.");
       } else if (mode === "forgot") {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {

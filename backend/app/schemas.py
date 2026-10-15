@@ -2,7 +2,10 @@ from decimal import Decimal
 from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+import re
+
+LEAGUE_NAME_REGEX = re.compile(r"^[a-zA-Z0-9 _'-]+$")
 
 # --- TRADE SCHEMAS ---
 class TradeRequest(BaseModel):
@@ -197,8 +200,22 @@ class PortfolioResponse(BaseModel):
 
 # --- LEAGUE SCHEMAS ---
 class LeagueCreateRequest(BaseModel):
-    name: str = Field(..., min_length=2, max_length=50)
+    name: str
     user_id: UUID
+
+    @field_validator("name")
+    @classmethod
+    def validate_league_name(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 3:
+            raise ValueError("League name must be at least 3 characters long.")
+        if len(cleaned) > 50:
+            raise ValueError("League name cannot exceed 50 characters.")
+        if not LEAGUE_NAME_REGEX.match(cleaned):
+            raise ValueError(
+                "League name can only contain letters, numbers, spaces, hyphens, underscores, and apostrophes."
+            )
+        return cleaned
 
 class LeagueJoinRequest(BaseModel):
     invite_code: str = Field(..., min_length=3, max_length=10)

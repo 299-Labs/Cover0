@@ -67,6 +67,100 @@ def test_join_league_and_duplicate_and_bad_code(client, db_session):
     assert bad.status_code == 404
 
 
+def test_leave_league_transfers_ownership_and_disbands(client, db_session):
+    creator = db_session.query(User).first()
+    league = _create_league(client, creator.id)
+
+    joiner = User(
+        username="leaver_member",
+        email="leaver@cover0.app",
+        cash_balance=Decimal("100000000.00"),
+    )
+    db_session.add(joiner)
+    db_session.commit()
+    db_session.refresh(joiner)
+
+    join_resp = client.post(
+        "/api/v1/leagues/join",
+        json={"invite_code": league["invite_code"], "user_id": str(joiner.id)},
+    )
+    assert join_resp.status_code == 200
+
+    leave_resp = client.post(
+        f"/api/v1/leagues/{league['id']}/leave",
+        json={"user_id": str(creator.id)},
+    )
+    assert leave_resp.status_code == 200
+    assert "Ownership transferred" in leave_resp.json()["message"]
+
+    transferred = db_session.query(League).filter(League.invite_code == league["invite_code"]).first()
+    assert transferred is not None
+    assert transferred.created_by == joiner.id
+
+    final_leave = client.post(
+        f"/api/v1/leagues/{league['id']}/leave",
+        json={"user_id": str(joiner.id)},
+    )
+    assert final_leave.status_code == 200
+    assert "disbanded" in final_leave.json()["message"]
+    assert db_session.query(League).filter(League.invite_code == league["invite_code"]).first() is None
+
+
+def test_leave_league_non_member_400(client, db_session):
+    creator = db_session.query(User).first()
+    league = _create_league(client, creator.id)
+
+    outsider = User(
+        username="leave_outsider",
+        email="leave_outsider@cover0.app",
+        cash_balance=Decimal("100000000.00"),
+    )
+    db_session.add(outsider)
+    db_session.commit()
+    db_session.refresh(outsider)
+
+    resp = client.post(
+        f"/api/v1/leagues/{league['id']}/leave",
+        json={"user_id": str(outsider.id)},
+    )
+    assert resp.status_code == 400
+
+
+def test_league_limit_enforced_on_create_and_join(client, db_session):
+    user = db_session.query(User).first()
+    created_codes = [_create_league(client, user.id, name=f"League {i}") for i in range(10)]
+
+    capped = client.post("/api/v1/leagues", json={"name": "League 11", "user_id": str(user.id)})
+    assert capped.status_code == 400
+    assert "League limit reached" in capped.json()["detail"]
+
+    joiner = User(
+        username="capped_joiner",
+        email="capped@cover0.app",
+        cash_balance=Decimal("100000000.00"),
+    )
+    db_session.add(joiner)
+    db_session.commit()
+    db_session.refresh(joiner)
+    for i in range(10):
+        db_session.add(
+            LeagueMember(
+                league_id=db_session.query(League).filter(
+                    League.invite_code == created_codes[i]["invite_code"]
+                ).first().id,
+                user_id=joiner.id,
+            )
+        )
+    db_session.commit()
+
+    blocked = client.post(
+        "/api/v1/leagues/join",
+        json={"invite_code": created_codes[0]["invite_code"], "user_id": str(joiner.id)},
+    )
+    assert blocked.status_code == 400
+    assert "League limit reached" in blocked.json()["detail"]
+
+
 def test_user_leagues_listing(client, db_session):
     user = db_session.query(User).first()
     created = _create_league(client, user.id)
@@ -139,6 +233,23 @@ def test_league_leaderboard_scoped_to_members(client, db_session, monkeypatch):
         "/api/v1/leagues/00000000-0000-0000-0000-000000000000/leaderboard"
     )
     assert missing.status_code == 404
+
+
+def test_create_league_name_validation(client, db_session):
+    user = db_session.query(User).first()
+
+    too_short = client.post("/api/v1/leagues", json={"name": "ab", "user_id": str(user.id)})
+    assert too_short.status_code == 422
+
+    whitespace = client.post("/api/v1/leagues", json={"name": "   ", "user_id": str(user.id)})
+    assert whitespace.status_code == 422
+
+    bad_chars = client.post("/api/v1/leagues", json={"name": "Bad!!! League@@@", "user_id": str(user.id)})
+    assert bad_chars.status_code == 422
+
+    valid = client.post("/api/v1/leagues", json={"name": "  Sunday Degens  ", "user_id": str(user.id)})
+    assert valid.status_code == 201
+    assert valid.json()["name"] == "Sunday Degens"
 
 
 def test_friends_endpoints_removed(client):

@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app import models
@@ -113,3 +113,38 @@ def update_my_profile(
         is_onboarded=current_user.is_onboarded,
         created_at=current_user.created_at.isoformat() if current_user.created_at else "",
     )
+
+
+@router.delete("/me", status_code=status.HTTP_200_OK)
+def delete_my_account(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently deletes user and cascades all holdings, transactions, and leagues.
+    Uses direct deletion to let PostgreSQL ON DELETE CASCADE handle cleanup cleanly.
+    """
+    user_id = current_user.id
+
+    try:
+        # 1. Delete user from public.users (triggers native Postgres CASCADE)
+        db.query(models.User).filter(models.User.id == user_id).delete(synchronize_session=False)
+        db.commit()
+
+        # 2. Attempt auth cleanup in a dedicated SAVEPOINT so failure never poisons the transaction
+        try:
+            with db.begin_nested():
+                db.execute(text("DELETE FROM auth.users WHERE id = :uid"), {"uid": str(user_id)})
+            db.commit()
+        except Exception:
+            # Safely ignored on local Postgres where auth.users does not exist
+            pass
+
+        return {"status": "ok", "message": "Account successfully deleted."}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user account: {str(e)}",
+        )

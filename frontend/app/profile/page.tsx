@@ -4,9 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
-import { fetchMyProfile, updateMyProfile } from "../lib/api";
+import { fetchMyProfile, updateMyProfile, deleteMyAccount } from "../lib/api";
 import Navbar from "../components/Navbar";
-import { Camera, User as UserIcon, Lock, LogOut, Mail, CheckCircle2, AlertCircle } from "lucide-react";
+import ConfirmModal from "../components/ConfirmModal";
+import { Camera, User as UserIcon, Lock, LogOut, Mail, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 
 interface ProfileData {
   id: string;
@@ -28,6 +29,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -115,6 +119,25 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      // 1. Delete user from Postgres
+      await deleteMyAccount();
+
+      // 2. Sign out of Supabase Auth
+      await supabase.auth.signOut();
+
+      // 3. Close modal & hard redirect to login page (flushes caches and resets state)
+      setShowDeleteModal(false);
+      window.location.href = "/Cover0/login";
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete account");
+      setDeletingAccount(false);
+    }
   };
 
   return (
@@ -247,10 +270,50 @@ export default function ProfilePage() {
               </Link>
             </div>
 
+            {/* Danger Zone */}
+            <div className="mt-10 bg-rose-950/20 border border-rose-500/30 rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2 mb-1">
+                <Trash2 size={16} />
+                Danger Zone
+              </h3>
+              <p className="text-xs text-[#506c64] mb-4">
+                Permanently delete your profile and leave all private leagues
+              </p>
+              {deleteError && (
+                <div className="mb-4 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl p-3 text-xs font-medium">
+                  {deleteError}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                disabled={deletingAccount}
+                className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+              >
+                Delete Account
+              </button>
+            </div>
+
           </div>
         )}
       </div>
       <Navbar />
+
+      {/* Themed Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setDeleteError(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Trader Account?"
+        description="This action is permanent and irreversible. Your profile, portfolio, and transaction history will be deleted forever. You will be removed from all leagues."
+        confirmText="Permanently Delete"
+        variant="danger"
+        loading={deletingAccount}
+        error={deleteError}
+      />
     </div>
   );
 }

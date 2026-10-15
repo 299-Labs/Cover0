@@ -315,7 +315,14 @@ export async function createLeague(payload: { name: string; user_id: string }): 
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Failed to create league");
+    let message = "Failed to create league";
+    if (typeof err.detail === "string") {
+      message = err.detail;
+    } else if (Array.isArray(err.detail) && err.detail.length > 0) {
+      // Strip out Pydantic's internal 'Value error, ' prefix if present
+      message = err.detail[0]?.msg?.replace(/^Value error,\s*/i, "") || message;
+    }
+    throw new Error(message);
   }
 
   return res.json();
@@ -331,6 +338,21 @@ export async function joinLeague(payload: { invite_code: string; user_id: string
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "Failed to join league");
+  }
+
+  return res.json();
+}
+
+export async function leaveLeague(leagueId: string, userId: string): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/leagues/${leagueId}/leave`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to leave league");
   }
 
   return res.json();
@@ -440,5 +462,33 @@ export async function updateMyProfile(payload: { username?: string; avatar_url?:
     const err = await res.json();
     throw new Error(err.detail || "Profile update failed");
   }
+  return res.json();
+}
+
+export async function deleteMyAccount(): Promise<{ status: string; message: string }> {
+  const token = await getAuthToken();
+  if (!token) {
+    throw new Error("No active session found. Please log in again.");
+  }
+
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    let message = "Failed to delete account";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Server error (${res.status}): ${res.statusText}`;
+    }
+    throw new Error(message);
+  }
+
   return res.json();
 }
