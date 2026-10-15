@@ -9,12 +9,19 @@ def test_health_check(client):
     assert response.json()["status"] == "ok"
 
 
-def test_get_demo_user(client):
-    response = client.get("/api/v1/users/demo")
+def test_check_username_availability(client):
+    response = client.get("/api/v1/users/check-username", params={"username": "fresh_handle"})
     assert response.status_code == 200
     data = response.json()
-    assert data["username"] == "demo_trader"
-    assert Decimal(str(data["cash_balance"])) == Decimal("100000000.00")
+    assert data["available"] is True
+
+    taken = client.get("/api/v1/users/check-username", params={"username": "demo_trader"})
+    assert taken.status_code == 200
+    assert taken.json()["available"] is False
+
+    invalid = client.get("/api/v1/users/check-username", params={"username": "ab"})
+    assert invalid.status_code == 200
+    assert invalid.json()["available"] is False
 
 
 def test_get_market_players(client, db_session):

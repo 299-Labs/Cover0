@@ -12,6 +12,7 @@ import {
   Player,
 } from "./lib/api";
 import Navbar from "./components/Navbar";
+import OnboardingModal from "./components/OnboardingModal";
 import PlayerDetailModal from "./components/PlayerDetailModal";
 import TradeModal from "./components/TradeModal";
 import { ArrowUpRight, ArrowDownRight, User as UserIcon } from "lucide-react";
@@ -34,6 +35,7 @@ export default function PortfolioPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [tradeSide, setTradeSide] = useState<"BUY" | "SELL">("BUY");
   const [isTradeOpen, setIsTradeOpen] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -48,6 +50,9 @@ export default function PortfolioPage() {
       const profile = await fetchMyProfile();
       const activeUserId = profile.id;
       setUserId(activeUserId);
+      if (!profile.is_onboarded) {
+        setNeedsOnboarding(true);
+      }
 
       // 2. Fetch authenticated user data
       const [portfolioData, historyData, playersData] = await Promise.all([
@@ -331,6 +336,13 @@ export default function PortfolioPage() {
           onSuccess={loadData}
         />
       )}
+
+      <OnboardingModal
+        isOpen={needsOnboarding}
+        onComplete={() => {
+          setNeedsOnboarding(false);
+        }}
+      />
 
       <Navbar />
     </div>

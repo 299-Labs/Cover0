@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
+import { checkUsernameAvailability } from "../lib/api";
 import Navbar from "../components/Navbar";
-import { LogIn, UserPlus, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
+import { LogIn, UserPlus, KeyRound, CheckCircle2, AlertCircle, Check, Loader2 } from "lucide-react";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -15,6 +16,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  const [usernameMsg, setUsernameMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,36 @@ export default function LoginPage() {
     };
   }, [router]);
 
+  // 2. Debounced username availability check on registration
+  useEffect(() => {
+    if (mode !== "signup" || !username.trim()) {
+      setUsernameStatus("idle");
+      setUsernameMsg("");
+      return;
+    }
+
+    const trimmed = username.trim();
+    if (trimmed.length < 3) {
+      setUsernameStatus("unavailable");
+      setUsernameMsg("Must be at least 3 characters");
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setUsernameStatus("checking");
+      const res = await checkUsernameAvailability(trimmed);
+      if (res.available) {
+        setUsernameStatus("available");
+        setUsernameMsg("Handle available");
+      } else {
+        setUsernameStatus("unavailable");
+        setUsernameMsg(res.message);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [username, mode]);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -53,11 +86,19 @@ export default function LoginPage() {
         if (error) throw error;
         router.push("/");
       } else if (mode === "signup") {
+        const cleanUser = username.trim().toLowerCase();
+
+        // Block submit if username is unavailable
+        const availability = await checkUsernameAvailability(cleanUser);
+        if (!availability.available) {
+          throw new Error(availability.message || "This username is already taken. Please choose another.");
+        }
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { username: username || email.split("@")[0] },
+            data: { username: cleanUser },
             // Ensures confirmation email links land on your /Cover0 base path
             emailRedirectTo: `${window.location.origin}/Cover0`,
           },
@@ -168,14 +209,27 @@ export default function LoginPage() {
               <label className="block text-[11px] font-bold uppercase tracking-wider text-[#a6ece0] mb-1.5">
                 Trader Username
               </label>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="gridiron_whale"
-                className={inputClasses}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                  placeholder="gridiron_whale"
+                  maxLength={20}
+                  className={inputClasses}
+                />
+                <div className="absolute right-3.5 top-3">
+                  {usernameStatus === "checking" && <Loader2 size={16} className="text-[#506c64] animate-spin" />}
+                  {usernameStatus === "available" && <Check size={16} className="text-[#a6ece0]" />}
+                  {usernameStatus === "unavailable" && <AlertCircle size={16} className="text-rose-400" />}
+                </div>
+              </div>
+              {usernameMsg && (
+                <p className={`text-[11px] font-medium mt-1.5 ${usernameStatus === "available" ? "text-[#a6ece0]" : "text-rose-400"}`}>
+                  {usernameMsg}
+                </p>
+              )}
             </div>
           )}
 
@@ -211,7 +265,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mode === "signup" && usernameStatus === "unavailable")}
             className="w-full py-3 bg-[#a6ece0]/15 hover:bg-[#a6ece0]/25 text-[#a6ece0] border border-[#a6ece0]/40 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {loading ? "Processing..." : mode === "signin" ? (

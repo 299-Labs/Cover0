@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  fetchDemoUser,
+  fetchMyProfile,
   fetchPortfolio,
   fetchTradeHistory,
   Portfolio,
@@ -39,12 +39,12 @@ export default function UserProfilePage() {
     if (!profileUserId) return;
     try {
       setLoading(true);
-      const [demoUser, portfolioData, historyData] = await Promise.all([
-        fetchDemoUser(),
+      const [currentUser, portfolioData, historyData] = await Promise.all([
+        fetchMyProfile(),
         fetchPortfolio(profileUserId),
         fetchTradeHistory(profileUserId),
       ]);
-      setCurrentUserId(demoUser.id);
+      setCurrentUserId(currentUser.id);
       setPortfolio(portfolioData);
       setTransactions(historyData);
     } catch (err: unknown) {

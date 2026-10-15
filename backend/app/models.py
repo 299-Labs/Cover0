@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, Text, String, Numeric, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Text, String, Numeric, DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db import Base
@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     avatar_url = Column(Text, nullable=True)
     cash_balance = Column(Numeric(14, 2), nullable=False, default=100000000.00) # $100M
+    is_onboarded = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     holdings = relationship("Holding", back_populates="user", cascade="all, delete-orphan")

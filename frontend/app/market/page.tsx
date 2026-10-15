@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchDemoUser, fetchPlayers, fetchPortfolio, Player, Portfolio } from "../lib/api";
+import { fetchMyProfile, fetchPlayers, fetchPortfolio, Player, Portfolio } from "../lib/api";
 import Navbar from "../components/Navbar";
 import TradeModal from "../components/TradeModal";
 import PlayerDetailModal from "../components/PlayerDetailModal";
@@ -31,7 +31,7 @@ export default function MarketPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const user = await fetchDemoUser();
+      const user = await fetchMyProfile();
       setUserId(user.id);
       const [playersData, portfolioData] = await Promise.all([
         fetchPlayers(),

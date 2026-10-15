@@ -29,7 +29,8 @@ def db_session():
     test_user = User(
         username="demo_trader",
         email="demo@cover0.app",
-        cash_balance=Decimal("100000000.00")
+        cash_balance=Decimal("100000000.00"),
+        is_onboarded=True,
     )
     test_player = Player(
         external_id="sleeper_1",

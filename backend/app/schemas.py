@@ -164,6 +164,7 @@ class UserProfileResponse(BaseModel):
     email: str
     avatar_url: Optional[str] = None
     cash_balance: Decimal
+    is_onboarded: bool = False
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

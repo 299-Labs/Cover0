@@ -172,6 +172,7 @@ def seed_database():
                 username="demo_trader",
                 email="demo@cover0.app",
                 cash_balance=Decimal("100000000.00"),
+                is_onboarded=True,
             )
             db.add(demo_user)
             print("Created demo_trader user.")

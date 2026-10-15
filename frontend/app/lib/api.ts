@@ -181,9 +181,21 @@ export interface TradeResponse {
   timestamp: string;
 }
 
-export async function fetchDemoUser() {
-  const res = await fetch(`${API_BASE_URL}/users/demo`);
-  if (!res.ok) throw new Error("Failed to fetch demo user");
+export interface UserProfile {
+  id: string;
+  username: string;
+  email: string;
+  avatar_url?: string;
+  cash_balance: number;
+  is_onboarded: boolean;
+  created_at: string;
+}
+
+export async function checkUsernameAvailability(username: string): Promise<{ available: boolean; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/users/check-username?username=${encodeURIComponent(username)}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return { available: false, message: "Error checking username" };
   return res.json();
 }
 
@@ -400,14 +412,18 @@ export async function getAuthToken(): Promise<string | null> {
   return data.session?.access_token || null;
 }
 
-export async function fetchMyProfile() {
+export async function fetchMyProfile(): Promise<UserProfile> {
   const token = await getAuthToken();
   const res = await fetch(`${API_BASE_URL}/users/me`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to load user profile");
-  return res.json();
+  const data = await res.json();
+  return {
+    ...data,
+    cash_balance: Number(data.cash_balance),
+  };
 }
 
 export async function updateMyProfile(payload: { username?: string; avatar_url?: string }) {
