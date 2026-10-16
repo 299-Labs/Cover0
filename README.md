@@ -1,5 +1,7 @@
 # Cover 0 — Fantasy Football Asset Exchange
 
+<img src="frontend/app/icon.png" width="75%">
+
 **[299labs.xyz/Cover0](https://299labs.xyz/Cover0)**
 
 Buy and sell fractional shares of NFL players. Prices move on a league-wide automated market maker fed by live Sleeper data and weekly fantasy scoring — every trader starts with a $100M virtual bankroll (pure simulation, zero real money).
